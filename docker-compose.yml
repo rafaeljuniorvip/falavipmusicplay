@@ -1,0 +1,39 @@
+version: "3.8"
+
+services:
+  falavipmusicplay:
+    image: ghcr.io/rafaeljuniorvip/falavipmusicplay:latest
+    networks:
+      - traefik-public
+    volumes:
+      - falavipmusicplay_storage:/app/storage
+      - falavipmusicplay_db:/app/data
+    environment:
+      - PYTHONUNBUFFERED=1
+    deploy:
+      mode: replicated
+      replicas: 1
+      placement:
+        constraints:
+          - node.role == manager
+      labels:
+        - traefik.enable=true
+        - traefik.docker.network=traefik-public
+        - traefik.http.routers.falavipmusicplay.rule=Host(`falavipmusicplay.seudominio.com`)
+        - traefik.http.routers.falavipmusicplay.entrypoints=websecure
+        - traefik.http.routers.falavipmusicplay.tls.certresolver=letsencrypt
+        - traefik.http.services.falavipmusicplay.loadbalancer.server.port=8000
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+
+volumes:
+  falavipmusicplay_storage:
+    driver: local
+  falavipmusicplay_db:
+    driver: local
+
+networks:
+  traefik-public:
+    external: true

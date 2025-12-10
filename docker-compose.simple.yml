@@ -1,0 +1,27 @@
+version: "3.8"
+
+# Stack simplificada sem Traefik (acesso direto pela porta)
+
+services:
+  falavipmusicplay:
+    image: ghcr.io/rafaeljuniorvip/falavipmusicplay:latest
+    ports:
+      - "8000:8000"
+    volumes:
+      - falavipmusicplay_storage:/app/storage
+      - falavipmusicplay_db:/app/data
+    environment:
+      - PYTHONUNBUFFERED=1
+    deploy:
+      mode: replicated
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+
+volumes:
+  falavipmusicplay_storage:
+    driver: local
+  falavipmusicplay_db:
+    driver: local
