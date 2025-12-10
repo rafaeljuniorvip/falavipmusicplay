@@ -18,7 +18,11 @@ pip install pyinstaller
 
 echo.
 echo [2/3] Compilando executavel...
-pyinstaller --onefile --windowed --name "FalaVIPMusicPlayer" main.py
+python -m PyInstaller --onefile --windowed --name "FalaVIPMusicPlayer" main.py
+
+echo.
+echo [2.5/3] Copiando arquivos de configuracao...
+copy settings.json dist\settings.json >nul
 
 echo.
 echo [3/3] Limpando arquivos temporarios...

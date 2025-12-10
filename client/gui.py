@@ -3,8 +3,10 @@ Interface gráfica do player usando tkinter
 """
 
 import tkinter as tk
-from tkinter import ttk
+import tkinter as tk
+from tkinter import ttk, messagebox
 from typing import Callable, Optional
+from config import SERVER_URL, save_settings
 
 
 class PlayerGUI:
@@ -139,6 +141,19 @@ class PlayerGUI:
         )
         self.skip_btn.pack(side=tk.LEFT, padx=5)
 
+        # Botão de Configurações
+        self.settings_btn = tk.Button(
+            controls_frame,
+            text="⚙️",
+            bg="#3a3a5e",
+            fg=self.fg_color,
+            activebackground="#4a4a7e",
+            activeforeground=self.fg_color,
+            command=self._open_settings,
+            **btn_style
+        )
+        self.settings_btn.pack(side=tk.LEFT, padx=5)
+
         # Volume
         volume_frame = tk.Frame(main_frame, bg=self.bg_color)
         volume_frame.pack(fill=tk.X)
@@ -236,3 +251,74 @@ class PlayerGUI:
         """Fecha a aplicação"""
         self.root.quit()
         self.root.destroy()
+
+    def _open_settings(self):
+        """Abre janela de configurações"""
+        settings_window = tk.Toplevel(self.root)
+        settings_window.title("Configurações")
+        settings_window.geometry("400x200")
+        settings_window.configure(bg=self.bg_color)
+        settings_window.resizable(False, False)
+
+        # Frame principal
+        frame = tk.Frame(settings_window, bg=self.bg_color, padx=20, pady=20)
+        frame.pack(fill=tk.BOTH, expand=True)
+
+        # Label do servidor
+        lbl_server = tk.Label(
+            frame,
+            text="Endereço do Servidor:",
+            font=("Segoe UI", 10),
+            fg=self.fg_color,
+            bg=self.bg_color
+        )
+        lbl_server.pack(anchor="w", pady=(0, 5))
+
+        # Entry do servidor
+        entry_server = tk.Entry(
+            frame,
+            font=("Segoe UI", 10),
+            bg="#3a3a5e",
+            fg=self.fg_color,
+            insertbackground=self.fg_color
+        )
+        entry_server.insert(0, SERVER_URL)
+        entry_server.pack(fill=tk.X, pady=(0, 20))
+
+        # Botão Salvar
+        def save():
+            new_url = entry_server.get().strip()
+            if not new_url:
+                messagebox.showerror("Erro", "O endereço do servidor não pode estar vazio.", parent=settings_window)
+                return
+
+            if save_settings({"server_url": new_url}):
+                messagebox.showinfo(
+                    "Sucesso",
+                    "Configurações salvas!\nReinicie o aplicativo para aplicar as alterações.",
+                    parent=settings_window
+                )
+                settings_window.destroy()
+            else:
+                messagebox.showerror("Erro", "Falha ao salvar configurações.", parent=settings_window)
+
+        btn_save = tk.Button(
+            frame,
+            text="Salvar",
+            bg=self.accent_color,
+            fg="#000000",
+            font=("Segoe UI", 10, "bold"),
+            command=save,
+            cursor="hand2",
+            padx=20,
+            pady=5
+        )
+        btn_save.pack()
+
+
+if __name__ == "__main__":
+    app = PlayerGUI()
+    app.update_song("Música de Teste.mp3", True)
+    app.update_sync_info("Sincronizado: 10 baixadas | 50 músicas")
+    app.update_status(True, "Conectado (Teste)")
+    app.run()

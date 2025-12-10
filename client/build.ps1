@@ -9,7 +9,8 @@ Write-Host ""
 try {
     $pythonVersion = python --version
     Write-Host "[OK] $pythonVersion" -ForegroundColor Green
-} catch {
+}
+catch {
     Write-Host "[ERRO] Python nao encontrado! Instale Python 3.11+" -ForegroundColor Red
     exit 1
 }
@@ -23,7 +24,11 @@ pip install pyinstaller
 # Compilar
 Write-Host ""
 Write-Host "[2/3] Compilando executavel..." -ForegroundColor Yellow
-pyinstaller --onefile --windowed --name "FalaVIPMusicPlayer" main.py
+python -m PyInstaller --onefile --windowed --name "FalaVIPMusicPlayer" main.py
+
+# Copiar settings.json
+Write-Host "[2.5/3] Copiando arquivos de configuracao..." -ForegroundColor Yellow
+Copy-Item "settings.json" "dist/settings.json" -Force
 
 # Limpar
 Write-Host ""
