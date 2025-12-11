@@ -194,5 +194,61 @@ const API = {
             method: 'DELETE'
         });
         return await res.json();
+    },
+
+    // AI Classification
+    async getAIStatus() {
+        const res = await fetch(`${this.baseUrl}/ai/status`);
+        return await res.json();
+    },
+
+    async classifyMusic(musicId) {
+        return await this.post(`/ai/classify/${musicId}`);
+    },
+
+    async classifyAllMusic() {
+        return await this.post('/ai/classify-all');
+    },
+
+    async getMusicMetadata(musicId) {
+        const res = await fetch(`${this.baseUrl}/music/${musicId}/metadata`);
+        return await res.json();
+    },
+
+    async getAllMusicMetadata() {
+        const res = await fetch(`${this.baseUrl}/music/metadata/all`);
+        return await res.json();
+    },
+
+    async updateMusicMetadata(musicId, data) {
+        return await this.put(`/music/${musicId}/metadata`, data);
+    },
+
+    async getArtists() {
+        const res = await fetch(`${this.baseUrl}/music/artists`);
+        return await res.json();
+    },
+
+    async getGenres() {
+        const res = await fetch(`${this.baseUrl}/music/genres`);
+        return await res.json();
+    },
+
+    async getMusicByArtist(artist) {
+        const res = await fetch(`${this.baseUrl}/music/by-artist/${encodeURIComponent(artist)}`);
+        return await res.json();
+    },
+
+    async getMusicByGenre(genre) {
+        const res = await fetch(`${this.baseUrl}/music/by-genre/${encodeURIComponent(genre)}`);
+        return await res.json();
+    },
+
+    async deleteMusicMetadata(musicId) {
+        return await this.delete(`/music/${musicId}/metadata`);
+    },
+
+    async clearAllMetadata() {
+        return await this.delete('/ai/clear-all-metadata');
     }
 };

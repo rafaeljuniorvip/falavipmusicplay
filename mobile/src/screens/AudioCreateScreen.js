@@ -16,7 +16,7 @@ import api from '../services/api';
 import { colors, borderRadius, spacing } from '../theme';
 
 export default function AudioCreateScreen({ navigation }) {
-  const [activeTab, setActiveTab] = useState('record'); // 'record' or 'ai'
+  const [activeTab, setActiveTab] = useState('record'); // 'record', 'ai', or 'mix'
 
   // Recording state
   const [recordingDuration, setRecordingDuration] = useState(0);
@@ -39,6 +39,20 @@ export default function AudioCreateScreen({ navigation }) {
   // Generated audio preview state
   const [generatedAudio, setGeneratedAudio] = useState(null); // { id, filename }
 
+  // Mix (Vinheta) state
+  const [musicList, setMusicList] = useState([]);
+  const [selectedMusic, setSelectedMusic] = useState(null);
+  const [musicModalVisible, setMusicModalVisible] = useState(false);
+  const [mixText, setMixText] = useState('');
+  const [mixName, setMixName] = useState('');
+  const [mixVoice, setMixVoice] = useState(null);
+  const [introDuration, setIntroDuration] = useState(5);
+  const [outroDuration, setOutroDuration] = useState(5);
+  const [fadeOutDuration, setFadeOutDuration] = useState(3);
+  const [musicDuckingVolume, setMusicDuckingVolume] = useState(0.2);
+  const [mixGenerating, setMixGenerating] = useState(false);
+  const [mixGeneratedAudio, setMixGeneratedAudio] = useState(null);
+
   // Audio hooks
   const recorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
   const recordingPlayer = useAudioPlayer(recordedUri ? { uri: recordedUri } : null);
@@ -48,6 +62,7 @@ export default function AudioCreateScreen({ navigation }) {
 
   useEffect(() => {
     checkTTSStatus();
+    loadMusicList();
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
     };
@@ -63,6 +78,17 @@ export default function AudioCreateScreen({ navigation }) {
       }
     } catch (error) {
       console.error('Error checking TTS status:', error);
+    }
+  };
+
+  // Load music list for mix feature
+  const loadMusicList = async () => {
+    try {
+      const list = await api.getMusicList();
+      // Filter only music (not ads)
+      setMusicList(list.filter(m => !m.is_ad));
+    } catch (error) {
+      console.error('Error loading music list:', error);
     }
   };
 
@@ -281,6 +307,109 @@ export default function AudioCreateScreen({ navigation }) {
     setGeneratedAudio(null);
   };
 
+  // ============ MIX (VINHETA) FUNCTIONS ============
+
+  const generateMixedAudio = async () => {
+    if (!mixText.trim()) {
+      Alert.alert('Erro', 'Digite o texto da locução');
+      return;
+    }
+
+    if (!selectedMusic) {
+      Alert.alert('Erro', 'Selecione uma música de fundo');
+      return;
+    }
+
+    const voice = mixVoice || selectedVoice;
+    if (!voice) {
+      Alert.alert('Erro', 'Selecione uma voz');
+      return;
+    }
+
+    setMixGenerating(true);
+    try {
+      const result = await api.generateMixedAudio({
+        text: mixText,
+        voiceId: voice.voice_id,
+        stability,
+        similarityBoost,
+        backgroundMusicId: selectedMusic.id,
+        introDuration,
+        outroDuration,
+        fadeOutDuration,
+        musicDuckingVolume,
+        name: mixName || null,
+        isAd: true,
+      });
+
+      setMixGeneratedAudio({
+        id: result.music_id,
+        filename: result.filename,
+        duration: result.duration,
+        ttsDuration: result.tts_duration,
+      });
+    } catch (error) {
+      console.error('Mix error:', error);
+      Alert.alert('Erro', error.message || 'Falha ao gerar vinheta');
+    } finally {
+      setMixGenerating(false);
+    }
+  };
+
+  const playMixGeneratedAudio = async () => {
+    if (!mixGeneratedAudio) return;
+
+    try {
+      await setAudioModeAsync({
+        allowsRecording: false,
+        playsInSilentMode: true,
+      });
+
+      if (generatedPlayer.playing) {
+        generatedPlayer.pause();
+      } else {
+        const audioUrl = `${api.getServerUrl()}/api/music/download/${mixGeneratedAudio.id}`;
+        generatedPlayer.replace({ uri: audioUrl });
+        generatedPlayer.play();
+      }
+    } catch (error) {
+      console.error('Playback error:', error);
+      Alert.alert('Erro', 'Não foi possível reproduzir o áudio');
+    }
+  };
+
+  const confirmMixGeneratedAudio = () => {
+    Alert.alert(
+      'Sucesso',
+      `Vinheta "${mixGeneratedAudio.filename}" salva no repertório!`
+    );
+    resetMixGeneratedAudio();
+    navigation.goBack();
+  };
+
+  const discardMixGeneratedAudio = async () => {
+    Alert.alert('Descartar', 'Deseja descartar esta vinheta?', [
+      { text: 'Cancelar', style: 'cancel' },
+      {
+        text: 'Descartar',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            await api.deleteMusic(mixGeneratedAudio.id);
+          } catch (error) {
+            console.error('Delete error:', error);
+          }
+          resetMixGeneratedAudio();
+        },
+      },
+    ]);
+  };
+
+  const resetMixGeneratedAudio = () => {
+    generatedPlayer.pause();
+    setMixGeneratedAudio(null);
+  };
+
   const formatDuration = (seconds) => {
     const mins = Math.floor(seconds / 60);
     const secs = seconds % 60;
@@ -306,7 +435,15 @@ export default function AudioCreateScreen({ navigation }) {
           onPress={() => setActiveTab('ai')}
         >
           <Text style={[styles.tabText, activeTab === 'ai' && styles.tabTextActive]}>
-            🤖 Gerar com IA
+            🤖 IA
+          </Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.tab, activeTab === 'mix' && styles.tabActive]}
+          onPress={() => setActiveTab('mix')}
+        >
+          <Text style={[styles.tabText, activeTab === 'mix' && styles.tabTextActive]}>
+            🎬 Vinheta
           </Text>
         </TouchableOpacity>
       </View>
@@ -397,7 +534,7 @@ export default function AudioCreateScreen({ navigation }) {
               )}
             </View>
           </View>
-        ) : (
+        ) : activeTab === 'ai' ? (
           // ============ AI TAB ============
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Gerar Audio com IA</Text>
@@ -549,7 +686,219 @@ export default function AudioCreateScreen({ navigation }) {
               </>
             )}
           </View>
-        )}
+        ) : activeTab === 'mix' ? (
+          // ============ MIX (VINHETA) TAB ============
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Criar Vinheta</Text>
+            <Text style={styles.sectionSubtitle}>
+              Música de fundo + locução com IA
+            </Text>
+
+            {!ttsConfigured ? (
+              <View style={styles.notConfigured}>
+                <Text style={styles.notConfiguredIcon}>⚠️</Text>
+                <Text style={styles.notConfiguredText}>
+                  API ElevenLabs não configurada
+                </Text>
+                <Text style={styles.notConfiguredHint}>
+                  Configure ELEVENLABS_API_KEY no servidor
+                </Text>
+              </View>
+            ) : mixGeneratedAudio ? (
+              // ============ MIX GENERATED AUDIO PREVIEW ============
+              <View style={styles.generatedPreview}>
+                <View style={styles.generatedIconContainer}>
+                  <Text style={styles.generatedIcon}>🎬</Text>
+                </View>
+                <Text style={styles.generatedTitle}>Vinheta Criada!</Text>
+                <Text style={styles.generatedFilename}>{mixGeneratedAudio.filename}</Text>
+                <Text style={styles.mixDurationInfo}>
+                  Duração: {Math.round(mixGeneratedAudio.duration)}s
+                </Text>
+
+                <View style={styles.previewActions}>
+                  <TouchableOpacity
+                    style={[styles.previewPlayBtn, generatedPlayer.playing && styles.previewPlayBtnActive]}
+                    onPress={playMixGeneratedAudio}
+                  >
+                    <Text style={styles.previewPlayBtnText}>
+                      {generatedPlayer.playing ? '⏹ Parar' : '▶️ Ouvir Preview'}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+
+                <View style={styles.confirmActions}>
+                  <TouchableOpacity
+                    style={styles.confirmBtn}
+                    onPress={confirmMixGeneratedAudio}
+                  >
+                    <Text style={styles.confirmBtnText}>✓ Salvar no Repertório</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.discardGeneratedBtn}
+                    onPress={discardMixGeneratedAudio}
+                  >
+                    <Text style={styles.discardGeneratedBtnText}>🗑️ Descartar</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            ) : (
+              <>
+                {/* Background Music Selection */}
+                <Text style={styles.inputLabel}>Música de Fundo</Text>
+                <TouchableOpacity
+                  style={styles.voiceSelector}
+                  onPress={() => setMusicModalVisible(true)}
+                >
+                  <Text style={styles.voiceSelectorText}>
+                    {selectedMusic ? selectedMusic.original_name : 'Selecionar música...'}
+                  </Text>
+                  <Text style={styles.voiceSelectorArrow}>▼</Text>
+                </TouchableOpacity>
+
+                {/* Voice Selection */}
+                <Text style={styles.inputLabel}>Voz para Locução</Text>
+                <TouchableOpacity
+                  style={styles.voiceSelector}
+                  onPress={() => setVoiceModalVisible(true)}
+                >
+                  <Text style={styles.voiceSelectorText}>
+                    {(mixVoice || selectedVoice)?.name || 'Selecionar voz...'}
+                  </Text>
+                  <Text style={styles.voiceSelectorArrow}>▼</Text>
+                </TouchableOpacity>
+
+                {/* Text Input */}
+                <Text style={styles.inputLabel}>Texto da Locução</Text>
+                <TextInput
+                  style={[styles.input, styles.textArea]}
+                  placeholder="Digite o texto que será falado sobre a música..."
+                  placeholderTextColor={colors.textMuted}
+                  value={mixText}
+                  onChangeText={setMixText}
+                  multiline
+                  numberOfLines={4}
+                  textAlignVertical="top"
+                />
+
+                {/* Name Input */}
+                <Text style={styles.inputLabel}>Nome da Vinheta (opcional)</Text>
+                <TextInput
+                  style={styles.input}
+                  placeholder="Ex: Vinheta Promocional Loja X"
+                  placeholderTextColor={colors.textMuted}
+                  value={mixName}
+                  onChangeText={setMixName}
+                />
+
+                {/* Timing Settings */}
+                <View style={styles.mixSettingsContainer}>
+                  <Text style={styles.mixSettingsTitle}>⏱️ Configurações de Tempo</Text>
+
+                  <View style={styles.mixSettingRow}>
+                    <Text style={styles.mixSettingLabel}>Intro (música normal): {introDuration}s</Text>
+                    <View style={styles.mixSliderRow}>
+                      <TouchableOpacity onPress={() => setIntroDuration(Math.max(1, introDuration - 1))}>
+                        <Text style={styles.sliderBtn}>−</Text>
+                      </TouchableOpacity>
+                      <View style={styles.sliderTrack}>
+                        <View style={[styles.sliderFill, { width: `${(introDuration / 15) * 100}%` }]} />
+                      </View>
+                      <TouchableOpacity onPress={() => setIntroDuration(Math.min(15, introDuration + 1))}>
+                        <Text style={styles.sliderBtn}>+</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+
+                  <View style={styles.mixSettingRow}>
+                    <Text style={styles.mixSettingLabel}>Outro (música normal após fala): {outroDuration}s</Text>
+                    <View style={styles.mixSliderRow}>
+                      <TouchableOpacity onPress={() => setOutroDuration(Math.max(1, outroDuration - 1))}>
+                        <Text style={styles.sliderBtn}>−</Text>
+                      </TouchableOpacity>
+                      <View style={styles.sliderTrack}>
+                        <View style={[styles.sliderFill, { width: `${(outroDuration / 15) * 100}%` }]} />
+                      </View>
+                      <TouchableOpacity onPress={() => setOutroDuration(Math.min(15, outroDuration + 1))}>
+                        <Text style={styles.sliderBtn}>+</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+
+                  <View style={styles.mixSettingRow}>
+                    <Text style={styles.mixSettingLabel}>Fade Out Final: {fadeOutDuration}s</Text>
+                    <View style={styles.mixSliderRow}>
+                      <TouchableOpacity onPress={() => setFadeOutDuration(Math.max(1, fadeOutDuration - 1))}>
+                        <Text style={styles.sliderBtn}>−</Text>
+                      </TouchableOpacity>
+                      <View style={styles.sliderTrack}>
+                        <View style={[styles.sliderFill, { width: `${(fadeOutDuration / 10) * 100}%` }]} />
+                      </View>
+                      <TouchableOpacity onPress={() => setFadeOutDuration(Math.min(10, fadeOutDuration + 1))}>
+                        <Text style={styles.sliderBtn}>+</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+
+                  <View style={styles.mixSettingRow}>
+                    <Text style={styles.mixSettingLabel}>Volume música durante fala: {Math.round(musicDuckingVolume * 100)}%</Text>
+                    <View style={styles.mixSliderRow}>
+                      <TouchableOpacity onPress={() => setMusicDuckingVolume(Math.max(0.1, musicDuckingVolume - 0.1))}>
+                        <Text style={styles.sliderBtn}>−</Text>
+                      </TouchableOpacity>
+                      <View style={styles.sliderTrack}>
+                        <View style={[styles.sliderFill, { width: `${musicDuckingVolume * 100}%` }]} />
+                      </View>
+                      <TouchableOpacity onPress={() => setMusicDuckingVolume(Math.min(0.5, musicDuckingVolume + 0.1))}>
+                        <Text style={styles.sliderBtn}>+</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                </View>
+
+                {/* Timeline Preview */}
+                <View style={styles.timelinePreview}>
+                  <Text style={styles.timelineTitle}>📊 Preview da Timeline</Text>
+                  <View style={styles.timelineBar}>
+                    <View style={[styles.timelineSegment, styles.introSegment, { flex: introDuration }]}>
+                      <Text style={styles.timelineSegmentText}>🎵</Text>
+                    </View>
+                    <View style={[styles.timelineSegment, styles.voiceSegment, { flex: 5 }]}>
+                      <Text style={styles.timelineSegmentText}>🗣️</Text>
+                    </View>
+                    <View style={[styles.timelineSegment, styles.outroSegment, { flex: outroDuration }]}>
+                      <Text style={styles.timelineSegmentText}>🎵</Text>
+                    </View>
+                    <View style={[styles.timelineSegment, styles.fadeSegment, { flex: fadeOutDuration }]}>
+                      <Text style={styles.timelineSegmentText}>📉</Text>
+                    </View>
+                  </View>
+                  <View style={styles.timelineLegend}>
+                    <Text style={styles.legendItem}>🎵 Música normal</Text>
+                    <Text style={styles.legendItem}>🗣️ Locução + música baixa</Text>
+                    <Text style={styles.legendItem}>📉 Fade out</Text>
+                  </View>
+                </View>
+
+                {/* Generate Button */}
+                <TouchableOpacity
+                  style={[styles.generateBtn, styles.mixGenerateBtn, mixGenerating && styles.generateBtnDisabled]}
+                  onPress={generateMixedAudio}
+                  disabled={mixGenerating}
+                >
+                  {mixGenerating ? (
+                    <>
+                      <ActivityIndicator color={colors.text} />
+                      <Text style={styles.generateBtnText}>Gerando Vinheta...</Text>
+                    </>
+                  ) : (
+                    <Text style={styles.generateBtnText}>🎬 Criar Vinheta</Text>
+                  )}
+                </TouchableOpacity>
+              </>
+            )}
+          </View>
+        ) : null}
       </ScrollView>
 
       {/* Voice Selection Modal */}
@@ -587,6 +936,53 @@ export default function AudioCreateScreen({ navigation }) {
             <TouchableOpacity
               style={styles.modalCloseBtn}
               onPress={() => setVoiceModalVisible(false)}
+            >
+              <Text style={styles.modalCloseBtnText}>Fechar</Text>
+            </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
+      {/* Music Selection Modal */}
+      <Modal
+        visible={musicModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setMusicModalVisible(false)}
+      >
+        <TouchableOpacity
+          style={styles.modalOverlay}
+          activeOpacity={1}
+          onPress={() => setMusicModalVisible(false)}
+        >
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>Selecionar Música de Fundo</Text>
+            <ScrollView style={styles.voiceList}>
+              {musicList.map((music) => (
+                <TouchableOpacity
+                  key={music.id}
+                  style={[
+                    styles.voiceItem,
+                    selectedMusic?.id === music.id && styles.voiceItemActive,
+                  ]}
+                  onPress={() => {
+                    setSelectedMusic(music);
+                    setMusicModalVisible(false);
+                  }}
+                >
+                  <Text style={styles.voiceName}>{music.original_name}</Text>
+                  <Text style={styles.voiceCategory}>
+                    {music.duration ? `${Math.round(music.duration)}s` : ''}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+              {musicList.length === 0 && (
+                <Text style={styles.emptyListText}>Nenhuma música disponível</Text>
+              )}
+            </ScrollView>
+            <TouchableOpacity
+              style={styles.modalCloseBtn}
+              onPress={() => setMusicModalVisible(false)}
             >
               <Text style={styles.modalCloseBtnText}>Fechar</Text>
             </TouchableOpacity>
@@ -1039,5 +1435,95 @@ const styles = StyleSheet.create({
     color: colors.danger,
     fontSize: 14,
     fontWeight: '500',
+  },
+
+  // Mix (Vinheta) styles
+  mixSettingsContainer: {
+    backgroundColor: colors.surface,
+    borderRadius: borderRadius.lg,
+    padding: spacing.md,
+    marginTop: spacing.lg,
+  },
+  mixSettingsTitle: {
+    color: colors.gold,
+    fontSize: 16,
+    fontWeight: '600',
+    marginBottom: spacing.md,
+  },
+  mixSettingRow: {
+    marginBottom: spacing.md,
+  },
+  mixSettingLabel: {
+    color: colors.textSecondary,
+    fontSize: 13,
+    marginBottom: spacing.xs,
+  },
+  mixSliderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  mixGenerateBtn: {
+    backgroundColor: colors.gold,
+    marginBottom: spacing.xl,
+  },
+  mixDurationInfo: {
+    color: colors.textSecondary,
+    fontSize: 14,
+    marginBottom: spacing.lg,
+  },
+
+  // Timeline Preview
+  timelinePreview: {
+    backgroundColor: colors.surface,
+    borderRadius: borderRadius.lg,
+    padding: spacing.md,
+    marginTop: spacing.lg,
+  },
+  timelineTitle: {
+    color: colors.text,
+    fontSize: 14,
+    fontWeight: '600',
+    marginBottom: spacing.md,
+  },
+  timelineBar: {
+    flexDirection: 'row',
+    height: 40,
+    borderRadius: borderRadius.sm,
+    overflow: 'hidden',
+    marginBottom: spacing.sm,
+  },
+  timelineSegment: {
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  timelineSegmentText: {
+    fontSize: 16,
+  },
+  introSegment: {
+    backgroundColor: colors.success + '40',
+  },
+  voiceSegment: {
+    backgroundColor: colors.gold + '60',
+  },
+  outroSegment: {
+    backgroundColor: colors.success + '40',
+  },
+  fadeSegment: {
+    backgroundColor: colors.textMuted + '40',
+  },
+  timelineLegend: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.sm,
+  },
+  legendItem: {
+    color: colors.textMuted,
+    fontSize: 11,
+  },
+  emptyListText: {
+    color: colors.textMuted,
+    textAlign: 'center',
+    padding: spacing.lg,
   },
 });

@@ -186,7 +186,7 @@
                 <div class="toolbar-left">
                     <div class="search-box">
                         <span class="search-icon">🔍</span>
-                        <input type="text" id="music-search" placeholder="Buscar músicas...">
+                        <input type="text" id="music-search" placeholder="Buscar músicas, artistas...">
                     </div>
                     <div class="filter-buttons">
                         <button class="filter-btn active" data-filter="all">Todos</button>
@@ -195,10 +195,31 @@
                     </div>
                 </div>
                 <div class="toolbar-right">
+                    <button class="btn btn-outline btn-danger-outline" id="btn-clear-metadata" title="Limpar todas classificações">
+                        <span>🗑</span> Limpar
+                    </button>
+                    <button class="btn btn-outline" id="btn-classify-all" title="Classificar todas com IA">
+                        <span>🤖</span> Classificar Todas
+                    </button>
                     <input type="file" id="file-upload" style="display: none" accept="audio/*" multiple>
                     <button class="btn btn-primary" onclick="document.getElementById('file-upload').click()">
                         <span>+</span> Upload
                     </button>
+                </div>
+            </div>
+
+            <!-- Group By Filters -->
+            <div class="groupby-toolbar">
+                <span class="groupby-label">Agrupar por:</span>
+                <div class="groupby-buttons">
+                    <button class="groupby-btn active" data-groupby="none">Lista</button>
+                    <button class="groupby-btn" data-groupby="artist">Artista</button>
+                    <button class="groupby-btn" data-groupby="genre">Gênero</button>
+                </div>
+                <div class="groupby-select" id="groupby-select-container" style="display: none;">
+                    <select id="groupby-select" class="form-select">
+                        <option value="">Selecione...</option>
+                    </select>
                 </div>
             </div>
 
@@ -214,15 +235,16 @@
 
             <!-- Music Table -->
             <div class="table-container">
-                <table>
+                <table class="music-table">
                     <thead>
                         <tr>
-                            <th style="width: 70px"></th>
-                            <th>Nome</th>
-                            <th style="width: 120px">Tipo</th>
-                            <th style="width: 80px">Duração</th>
-                            <th style="width: 100px">Data</th>
-                            <th style="width: 100px">Ações</th>
+                            <th style="width: 90px; white-space: nowrap;"></th>
+                            <th style="min-width: 200px;">Nome / Título</th>
+                            <th style="width: 180px;">Artista</th>
+                            <th style="width: 120px;">Gênero</th>
+                            <th style="width: 110px;">Tipo</th>
+                            <th style="width: 70px;">Duração</th>
+                            <th style="width: 110px; white-space: nowrap;">Ações</th>
                         </tr>
                     </thead>
                     <tbody id="music-table-body">

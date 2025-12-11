@@ -24,7 +24,13 @@ const state = {
     logsFilter: 'all',
     logsPage: 1,
     logsPerPage: 50,
-    logsTotal: 0
+    logsTotal: 0,
+    // AI Classification
+    aiConfigured: false,
+    groupBy: 'none', // 'none', 'artist', 'genre'
+    selectedGroup: '', // Selected artist or genre
+    artists: [],
+    genres: []
 };
 
 // ============ INIT ============
@@ -149,6 +155,32 @@ function setupMusicLibraryListeners() {
         document.getElementById('toggle-ad').classList.add('active');
         document.getElementById('toggle-music').classList.remove('active');
     });
+
+    // Classify All Button
+    document.getElementById('btn-classify-all')?.addEventListener('click', classifyAllMusic);
+
+    // Clear Metadata Button
+    document.getElementById('btn-clear-metadata')?.addEventListener('click', clearAllMetadata);
+
+    // Group By Buttons
+    document.querySelectorAll('.groupby-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            document.querySelectorAll('.groupby-btn').forEach(b => b.classList.remove('active'));
+            e.target.classList.add('active');
+            state.groupBy = e.target.dataset.groupby;
+            state.selectedGroup = '';
+            handleGroupByChange();
+        });
+    });
+
+    // Group By Select
+    document.getElementById('groupby-select')?.addEventListener('change', (e) => {
+        state.selectedGroup = e.target.value;
+        filterMusicList();
+    });
+
+    // Check AI status
+    checkAIStatus();
 }
 
 function setupSettingsListeners() {
@@ -273,9 +305,19 @@ function renderUpcomingEvents(preview) {
 // ============ MUSIC LIBRARY ============
 async function loadMusicLibrary() {
     try {
-        const music = await API.getMusicList();
+        // Load music with metadata
+        const music = await API.getAllMusicMetadata();
         state.musicList = music;
         state.filteredMusic = music;
+
+        // Load artists and genres for grouping
+        const [artists, genres] = await Promise.all([
+            API.getArtists(),
+            API.getGenres()
+        ]);
+        state.artists = artists;
+        state.genres = genres;
+
         filterMusicList();
     } catch (err) {
         console.error('Error loading music library:', err);
@@ -293,10 +335,20 @@ function filterMusicList() {
         filtered = filtered.filter(m => m.is_ad);
     }
 
-    // Apply search
+    // Apply group filter
+    if (state.groupBy === 'artist' && state.selectedGroup) {
+        filtered = filtered.filter(m => m.artist === state.selectedGroup);
+    } else if (state.groupBy === 'genre' && state.selectedGroup) {
+        filtered = filtered.filter(m => m.genre === state.selectedGroup);
+    }
+
+    // Apply search (search in name, artist, title, genre)
     if (state.searchQuery) {
         filtered = filtered.filter(m =>
-            m.original_name.toLowerCase().includes(state.searchQuery)
+            m.original_name.toLowerCase().includes(state.searchQuery) ||
+            (m.artist && m.artist.toLowerCase().includes(state.searchQuery)) ||
+            (m.title && m.title.toLowerCase().includes(state.searchQuery)) ||
+            (m.genre && m.genre.toLowerCase().includes(state.searchQuery))
         );
     }
 
@@ -311,7 +363,7 @@ function renderMusicTable() {
     if (state.filteredMusic.length === 0) {
         tbody.innerHTML = `
             <tr>
-                <td colspan="5" class="empty-state">
+                <td colspan="7" class="empty-state">
                     <div class="empty-state-icon">🎵</div>
                     <p>Nenhuma música encontrada</p>
                 </td>
@@ -324,20 +376,30 @@ function renderMusicTable() {
     state.filteredMusic.forEach(song => {
         const tr = document.createElement('tr');
         const durationStr = song.duration ? formatTime(song.duration) : '-';
+        const displayName = song.title || song.original_name;
+        const artistDisplay = song.artist || '<span class="text-muted">-</span>';
+        const genreDisplay = song.genre || '<span class="text-muted">-</span>';
+        const isClassified = song.artist || song.title;
+
         tr.innerHTML = `
             <td>
                 <button class="btn-icon" onclick="playSong('${song.id}')" title="Reproduzir">▶</button>
                 <button class="btn-icon" onclick="insertSongNext('${song.id}', '${song.original_name.replace(/'/g, "\\'")}')" title="Tocar como próxima">⏭</button>
             </td>
-            <td>${song.original_name}</td>
+            <td>
+                <div class="song-name">${displayName}</div>
+                ${song.title && song.title !== song.original_name ? `<div class="song-filename text-muted">${song.original_name}</div>` : ''}
+            </td>
+            <td>${artistDisplay}</td>
+            <td>${genreDisplay}</td>
             <td>
                 <span class="badge ${song.is_ad ? 'ad' : 'music'}">
                     ${song.is_ad ? '📢 Propaganda' : '🎵 Música'}
                 </span>
             </td>
             <td>${durationStr}</td>
-            <td>${new Date(song.created_at).toLocaleDateString('pt-BR')}</td>
             <td>
+                <button class="btn-icon ${isClassified ? '' : 'highlight'}" onclick="classifyMusic('${song.id}')" title="Classificar com IA">🤖</button>
                 <button class="btn-icon" onclick="editMusic('${song.id}')" title="Editar">✏️</button>
                 <button class="btn-icon delete" onclick="confirmDeleteMusic('${song.id}')" title="Excluir">🗑</button>
             </td>
@@ -465,6 +527,242 @@ window.confirmDeleteMusic = (id) => {
         }
     });
 };
+
+// ============ AI CLASSIFICATION ============
+async function checkAIStatus() {
+    try {
+        const status = await API.getAIStatus();
+        state.aiConfigured = status.configured;
+
+        const classifyAllBtn = document.getElementById('btn-classify-all');
+        if (classifyAllBtn) {
+            if (!status.configured) {
+                classifyAllBtn.disabled = true;
+                classifyAllBtn.title = 'Configure OPENROUTER_API_KEY no .env';
+            }
+        }
+    } catch (err) {
+        console.error('Error checking AI status:', err);
+    }
+}
+
+window.classifyMusic = async function(musicId) {
+    if (!state.aiConfigured) {
+        showToast('IA não configurada. Configure OPENROUTER_API_KEY no .env', 'error');
+        return;
+    }
+
+    showLoading('Classificando com IA...');
+    try {
+        const result = await API.classifyMusic(musicId);
+        hideLoading();
+
+        if (result.success) {
+            const meta = result.metadata;
+            showToast(`Classificado: ${meta.artist || 'Desconhecido'} - ${meta.title || 'Desconhecido'}`, 'success');
+            loadMusicLibrary();
+        } else {
+            showToast('Erro ao classificar', 'error');
+        }
+    } catch (err) {
+        hideLoading();
+        console.error('Error classifying:', err);
+        showToast(err.message || 'Erro ao classificar música', 'error');
+    }
+};
+
+async function classifyAllMusic() {
+    if (!state.aiConfigured) {
+        showToast('IA não configurada. Configure OPENROUTER_API_KEY no .env', 'error');
+        return;
+    }
+
+    // Count unclassified
+    const unclassified = state.musicList.filter(m => !m.artist && !m.title);
+    if (unclassified.length === 0) {
+        showToast('Todas as músicas já estão classificadas!', 'info');
+        return;
+    }
+
+    showConfirm(
+        'Classificar Todas',
+        `Deseja classificar ${unclassified.length} música(s) com IA?`,
+        async (confirmed) => {
+            if (!confirmed) return;
+
+            // Mostrar modal de progresso
+            showClassifyProgress(unclassified.length);
+
+            // Usar EventSource para streaming
+            const eventSource = new EventSource('/api/ai/classify-all-stream?batch_size=5');
+
+            eventSource.addEventListener('start', (e) => {
+                const data = JSON.parse(e.data);
+                updateClassifyProgress(0, data.total, 0, 0, data.message);
+            });
+
+            eventSource.addEventListener('progress', (e) => {
+                const data = JSON.parse(e.data);
+                updateClassifyProgress(
+                    data.current,
+                    data.total,
+                    data.classified,
+                    data.failed,
+                    data.success
+                        ? `✓ ${data.artist || 'Desconhecido'} - ${data.title || data.music_name}`
+                        : `✗ Falha: ${data.music_name}`
+                );
+            });
+
+            eventSource.addEventListener('complete', (e) => {
+                const data = JSON.parse(e.data);
+                eventSource.close();
+                hideClassifyProgress();
+                showToast(data.message, data.failed > 0 ? 'warning' : 'success');
+                loadMusicLibrary();
+            });
+
+            eventSource.onerror = (e) => {
+                console.error('SSE Error:', e);
+                eventSource.close();
+                hideClassifyProgress();
+                showToast('Erro na conexão com o servidor', 'error');
+            };
+        }
+    );
+}
+
+function showClassifyProgress(total) {
+    // Criar modal de progresso se não existir
+    let modal = document.getElementById('classify-progress-modal');
+    if (!modal) {
+        modal = document.createElement('div');
+        modal.id = 'classify-progress-modal';
+        modal.className = 'modal active';
+        modal.innerHTML = `
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3>🤖 Classificando com IA</h3>
+                </div>
+                <div class="modal-body">
+                    <div class="progress-stats">
+                        <span id="classify-progress-current">0</span> / <span id="classify-progress-total">${total}</span>
+                        <span class="progress-percent">(<span id="classify-progress-percent">0</span>%)</span>
+                    </div>
+                    <div class="progress-bar-container">
+                        <div class="progress-bar-fill" id="classify-progress-bar" style="width: 0%"></div>
+                    </div>
+                    <div class="progress-details">
+                        <div class="progress-counts">
+                            <span class="success-count">✓ <span id="classify-success-count">0</span></span>
+                            <span class="fail-count">✗ <span id="classify-fail-count">0</span></span>
+                        </div>
+                        <div class="progress-current-item" id="classify-current-item">Iniciando...</div>
+                    </div>
+                    <div class="progress-log" id="classify-progress-log"></div>
+                </div>
+            </div>
+        `;
+        document.body.appendChild(modal);
+    } else {
+        modal.classList.add('active');
+        document.getElementById('classify-progress-total').textContent = total;
+        document.getElementById('classify-progress-current').textContent = '0';
+        document.getElementById('classify-progress-percent').textContent = '0';
+        document.getElementById('classify-progress-bar').style.width = '0%';
+        document.getElementById('classify-success-count').textContent = '0';
+        document.getElementById('classify-fail-count').textContent = '0';
+        document.getElementById('classify-current-item').textContent = 'Iniciando...';
+        document.getElementById('classify-progress-log').innerHTML = '';
+    }
+}
+
+function updateClassifyProgress(current, total, classified, failed, message) {
+    const percent = Math.round((current / total) * 100);
+
+    document.getElementById('classify-progress-current').textContent = current;
+    document.getElementById('classify-progress-total').textContent = total;
+    document.getElementById('classify-progress-percent').textContent = percent;
+    document.getElementById('classify-progress-bar').style.width = `${percent}%`;
+    document.getElementById('classify-success-count').textContent = classified;
+    document.getElementById('classify-fail-count').textContent = failed;
+    document.getElementById('classify-current-item').textContent = message;
+
+    // Adicionar ao log (últimas 5 entradas)
+    const log = document.getElementById('classify-progress-log');
+    const entry = document.createElement('div');
+    entry.className = message.startsWith('✓') ? 'log-entry success' : 'log-entry error';
+    entry.textContent = message;
+    log.insertBefore(entry, log.firstChild);
+
+    // Limitar a 5 entradas
+    while (log.children.length > 5) {
+        log.removeChild(log.lastChild);
+    }
+}
+
+function hideClassifyProgress() {
+    const modal = document.getElementById('classify-progress-modal');
+    if (modal) {
+        modal.classList.remove('active');
+    }
+}
+
+async function clearAllMetadata() {
+    const classified = state.musicList.filter(m => m.artist || m.title).length;
+
+    if (classified === 0) {
+        showToast('Nenhuma classificação para limpar', 'info');
+        return;
+    }
+
+    showConfirm(
+        'Limpar Classificações',
+        `Deseja remover a classificação de ${classified} música(s)? Isso permitirá reclassificar todas.`,
+        async (confirmed) => {
+            if (!confirmed) return;
+
+            showLoading('Limpando classificações...');
+            try {
+                const result = await API.clearAllMetadata();
+                hideLoading();
+
+                if (result.success) {
+                    showToast(`${result.deleted} classificações removidas`, 'success');
+                    loadMusicLibrary();
+                }
+            } catch (err) {
+                hideLoading();
+                console.error('Error clearing metadata:', err);
+                showToast('Erro ao limpar classificações', 'error');
+            }
+        }
+    );
+}
+
+function handleGroupByChange() {
+    const selectContainer = document.getElementById('groupby-select-container');
+    const select = document.getElementById('groupby-select');
+
+    if (state.groupBy === 'none') {
+        selectContainer.style.display = 'none';
+        filterMusicList();
+        return;
+    }
+
+    selectContainer.style.display = 'block';
+
+    // Populate select based on groupBy type
+    if (state.groupBy === 'artist') {
+        select.innerHTML = '<option value="">Todos os Artistas</option>' +
+            state.artists.map(a => `<option value="${a.artist}">${a.artist} (${a.count})</option>`).join('');
+    } else if (state.groupBy === 'genre') {
+        select.innerHTML = '<option value="">Todos os Gêneros</option>' +
+            state.genres.map(g => `<option value="${g.genre}">${g.genre} (${g.count})</option>`).join('');
+    }
+
+    filterMusicList();
+}
 
 // ============ SCHEDULE MODULE ============
 function setupScheduleListeners() {

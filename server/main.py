@@ -17,7 +17,7 @@ load_dotenv()  # Carrega variáveis do arquivo .env
 from datetime import datetime, timedelta
 from typing import Optional, Dict, List
 
-from fastapi import FastAPI, UploadFile, File, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, UploadFile, File, HTTPException, WebSocket, WebSocketDisconnect, Request
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.middleware.cors import CORSMiddleware
@@ -281,6 +281,23 @@ async def init_db():
                 scheduled_time TEXT NOT NULL,
                 event_type TEXT DEFAULT 'music',
                 played INTEGER DEFAULT 0,
+                FOREIGN KEY (music_id) REFERENCES music(id)
+            )
+        """)
+
+        # Tabela de metadados de música (classificação por IA)
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS music_metadata (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                music_id TEXT NOT NULL UNIQUE,
+                artist TEXT,
+                title TEXT,
+                album TEXT,
+                genre TEXT,
+                year TEXT,
+                obs TEXT,
+                raw_response TEXT,
+                classified_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY (music_id) REFERENCES music(id)
             )
         """)
@@ -1551,6 +1568,10 @@ async def player_skip():
 # Configuração ElevenLabs (API Key deve ser definida como variável de ambiente)
 ELEVENLABS_API_KEY = os.getenv("ELEVENLABS_API_KEY", "")
 
+# Configuração OpenRouter (para classificação de músicas com IA)
+OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY", "")
+OPENROUTER_MODEL = os.getenv("OPENROUTER_MODEL", "google/gemini-2.0-flash-001")
+
 class TTSRequest(BaseModel):
     text: str
     voice_id: str = "21m00Tcm4TlvDq8ikWAM"  # Rachel (default)
@@ -1693,6 +1714,702 @@ async def get_tts_status():
     }
 
 
+# ============ AUDIO MIXING (TTS + Background Music) ============
+
+class MixAudioRequest(BaseModel):
+    text: str  # Texto para TTS
+    voice_id: str = "21m00Tcm4TlvDq8ikWAM"
+    model_id: str = "eleven_multilingual_v2"
+    stability: float = 0.5
+    similarity_boost: float = 0.75
+
+    # Música de fundo
+    background_music_id: str  # ID da música de fundo
+
+    # Configurações de timing (em segundos)
+    intro_duration: float = 5.0  # Tempo de música normal no início
+    outro_duration: float = 5.0  # Tempo de música normal após a fala
+    fade_out_duration: float = 3.0  # Duração do fade out final
+
+    # Configurações de volume
+    music_volume: float = 1.0  # Volume da música durante intro/outro (0.0 a 1.0)
+    music_ducking_volume: float = 0.2  # Volume da música durante a fala (0.0 a 1.0)
+    voice_volume: float = 1.0  # Volume da voz (0.0 a 1.0)
+    fade_duration: float = 0.5  # Duração do fade entre volumes
+
+    # Metadados
+    name: Optional[str] = None
+    is_ad: bool = True
+
+
+@app.post("/api/tts/mix")
+async def generate_mixed_audio(data: MixAudioRequest):
+    """
+    Gera áudio mixado: música de fundo + locução TTS
+
+    Estrutura do áudio:
+    1. [intro_duration] segundos de música em volume normal
+    2. Fade down da música para music_ducking_volume
+    3. Locução TTS com música baixa de fundo
+    4. Fade up da música para volume normal
+    5. [outro_duration] segundos de música em volume normal
+    6. Fade out final de [fade_out_duration] segundos
+    """
+    import subprocess
+    import tempfile
+
+    if not ELEVENLABS_API_KEY:
+        raise HTTPException(status_code=500, detail="API Key do ElevenLabs não configurada")
+
+    if not data.text.strip():
+        raise HTTPException(status_code=400, detail="Texto não pode estar vazio")
+
+    # Buscar música de fundo
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute("SELECT * FROM music WHERE id = ?", (data.background_music_id,)) as cursor:
+            bg_music = await cursor.fetchone()
+            if not bg_music:
+                raise HTTPException(status_code=404, detail="Música de fundo não encontrada")
+
+    bg_music_path = STORAGE_DIR / bg_music["filename"]
+    if not bg_music_path.exists():
+        raise HTTPException(status_code=404, detail="Arquivo de música não encontrado")
+
+    # Gerar TTS
+    async with httpx.AsyncClient(timeout=60.0) as client:
+        try:
+            response = await client.post(
+                f"https://api.elevenlabs.io/v1/text-to-speech/{data.voice_id}",
+                headers={
+                    "xi-api-key": ELEVENLABS_API_KEY,
+                    "Content-Type": "application/json"
+                },
+                json={
+                    "text": data.text,
+                    "model_id": data.model_id,
+                    "voice_settings": {
+                        "stability": data.stability,
+                        "similarity_boost": data.similarity_boost
+                    }
+                }
+            )
+            response.raise_for_status()
+            tts_content = response.content
+        except httpx.HTTPStatusError as e:
+            error_detail = "Erro na API ElevenLabs"
+            try:
+                error_json = e.response.json()
+                error_detail = error_json.get("detail", {}).get("message", str(e))
+            except:
+                pass
+            raise HTTPException(status_code=e.response.status_code, detail=error_detail)
+
+    # Criar arquivos temporários
+    with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as tts_file:
+        tts_file.write(tts_content)
+        tts_path = tts_file.name
+
+    try:
+        # Obter duração do TTS
+        tts_duration = 0
+        try:
+            result = subprocess.run(
+                ["ffprobe", "-v", "error", "-show_entries", "format=duration",
+                 "-of", "default=noprint_wrappers=1:nokey=1", tts_path],
+                capture_output=True, text=True
+            )
+            tts_duration = float(result.stdout.strip())
+        except:
+            tts_duration = 10  # Fallback
+
+        # Calcular tempos
+        intro = data.intro_duration
+        outro = data.outro_duration
+        fade_out = data.fade_out_duration
+        fade_time = data.fade_duration
+
+        # Tempo total necessário de música
+        total_duration = intro + tts_duration + outro + fade_out
+
+        # Volumes
+        vol_normal = data.music_volume
+        vol_duck = data.music_ducking_volume
+        vol_voice = data.voice_volume
+
+        # Gerar nome do arquivo
+        if data.name:
+            safe_name = "".join(c for c in data.name if c.isalnum() or c in (' ', '-', '_')).strip()[:50]
+        else:
+            safe_name = f"mix_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+
+        music_id = str(uuid.uuid4())
+        output_filename = f"{music_id}.mp3"
+        output_path = STORAGE_DIR / output_filename
+
+        # FFmpeg complex filter para mixagem
+        # Estrutura:
+        # - Música: volume normal -> fade down -> volume baixo -> fade up -> volume normal -> fade out
+        # - Voz: delay de intro_duration segundos, com volume configurado
+
+        # Pontos de mudança de volume na música:
+        # t=0: vol_normal
+        # t=intro: começa fade down
+        # t=intro+fade_time: vol_duck (durante TTS)
+        # t=intro+tts_duration: começa fade up
+        # t=intro+tts_duration+fade_time: vol_normal
+        # t=intro+tts_duration+outro: começa fade out
+        # t=total_duration: vol=0
+
+        t1 = intro  # Início do fade down
+        t2 = intro + fade_time  # Fim do fade down
+        t3 = intro + tts_duration  # Início do fade up
+        t4 = intro + tts_duration + fade_time  # Fim do fade up
+        t5 = intro + tts_duration + outro  # Início do fade out final
+        t6 = total_duration  # Fim
+
+        # Filter complex para FFmpeg
+        filter_complex = (
+            # Input 0: música de fundo, loop se necessário e cortar no tempo total
+            f"[0:a]aloop=loop=-1:size=2e+09,atrim=0:{total_duration},"
+            # Aplicar curva de volume: normal -> duck -> normal -> fade out
+            f"volume='{vol_normal}':enable='lt(t,{t1})',"
+            f"volume='{vol_normal}-({vol_normal}-{vol_duck})*(t-{t1})/{fade_time}':enable='between(t,{t1},{t2})',"
+            f"volume='{vol_duck}':enable='between(t,{t2},{t3})',"
+            f"volume='{vol_duck}+({vol_normal}-{vol_duck})*(t-{t3})/{fade_time}':enable='between(t,{t3},{t4})',"
+            f"volume='{vol_normal}':enable='between(t,{t4},{t5})',"
+            f"volume='{vol_normal}*(1-(t-{t5})/{fade_out})':enable='gte(t,{t5})',"
+            f"aformat=sample_fmts=fltp:sample_rates=44100:channel_layouts=stereo[bg];"
+            # Input 1: TTS com delay e volume
+            f"[1:a]adelay={int(intro * 1000)}|{int(intro * 1000)},volume={vol_voice},"
+            f"aformat=sample_fmts=fltp:sample_rates=44100:channel_layouts=stereo[voice];"
+            # Mixar os dois
+            f"[bg][voice]amix=inputs=2:duration=first:dropout_transition=0[out]"
+        )
+
+        # Executar FFmpeg
+        cmd = [
+            "ffmpeg", "-y",
+            "-i", str(bg_music_path),
+            "-i", tts_path,
+            "-filter_complex", filter_complex,
+            "-map", "[out]",
+            "-c:a", "libmp3lame", "-b:a", "192k",
+            str(output_path)
+        ]
+
+        result = subprocess.run(cmd, capture_output=True, text=True)
+
+        if result.returncode != 0:
+            print(f"FFmpeg error: {result.stderr}")
+            raise HTTPException(status_code=500, detail=f"Erro ao mixar áudio: {result.stderr[:200]}")
+
+        # Obter duração final
+        final_duration = None
+        if MUTAGEN_AVAILABLE:
+            try:
+                audio = MP3(str(output_path))
+                final_duration = audio.info.length
+            except:
+                pass
+
+        # Salvar no banco de dados
+        async with aiosqlite.connect(DB_PATH) as db:
+            await db.execute(
+                """INSERT INTO music (id, filename, original_name, duration, is_ad, created_at)
+                   VALUES (?, ?, ?, ?, ?, ?)""",
+                (music_id, output_filename, f"{safe_name}.mp3", final_duration, data.is_ad, datetime.now().isoformat())
+            )
+            await db.commit()
+
+        # Notificar clientes
+        await manager.broadcast({
+            "type": "music_added",
+            "music_id": music_id,
+            "music_name": f"{safe_name}.mp3"
+        })
+
+        return {
+            "success": True,
+            "music_id": music_id,
+            "filename": f"{safe_name}.mp3",
+            "duration": final_duration,
+            "tts_duration": tts_duration,
+            "total_duration": total_duration,
+            "is_ad": data.is_ad,
+            "config": {
+                "intro": intro,
+                "outro": outro,
+                "fade_out": fade_out,
+                "music_volume": vol_normal,
+                "ducking_volume": vol_duck
+            }
+        }
+
+    finally:
+        # Limpar arquivo temporário
+        try:
+            os.unlink(tts_path)
+        except:
+            pass
+
+
+@app.get("/api/tts/mix/preview-timing")
+async def preview_mix_timing(
+    background_music_id: str,
+    text_length: int = 100,
+    intro_duration: float = 5.0,
+    outro_duration: float = 5.0,
+    fade_out_duration: float = 3.0
+):
+    """
+    Calcula e retorna uma previsão dos timings do áudio mixado
+    (útil para o app mostrar uma prévia antes de gerar)
+    """
+    # Estimar duração do TTS (aproximadamente 150 palavras por minuto, ~5 caracteres por palavra)
+    estimated_words = text_length / 5
+    estimated_tts_duration = (estimated_words / 150) * 60  # em segundos
+
+    # Mínimo de 2 segundos
+    estimated_tts_duration = max(2.0, estimated_tts_duration)
+
+    total_duration = intro_duration + estimated_tts_duration + outro_duration + fade_out_duration
+
+    return {
+        "estimated_tts_duration": round(estimated_tts_duration, 1),
+        "total_duration": round(total_duration, 1),
+        "timeline": {
+            "intro_start": 0,
+            "intro_end": intro_duration,
+            "voice_start": intro_duration,
+            "voice_end": round(intro_duration + estimated_tts_duration, 1),
+            "outro_start": round(intro_duration + estimated_tts_duration, 1),
+            "outro_end": round(intro_duration + estimated_tts_duration + outro_duration, 1),
+            "fade_out_start": round(intro_duration + estimated_tts_duration + outro_duration, 1),
+            "fade_out_end": round(total_duration, 1)
+        }
+    }
+
+
+# ============ AI MUSIC CLASSIFICATION (OpenRouter) ============
+
+class ClassifyRequest(BaseModel):
+    music_id: str
+
+
+class MusicMetadataUpdate(BaseModel):
+    artist: Optional[str] = None
+    title: Optional[str] = None
+    album: Optional[str] = None
+    genre: Optional[str] = None
+    year: Optional[str] = None
+    obs: Optional[str] = None
+
+
+@app.get("/api/ai/status")
+async def get_ai_status():
+    """Verifica se a API OpenRouter está configurada"""
+    return {
+        "configured": bool(OPENROUTER_API_KEY),
+        "model": OPENROUTER_MODEL
+    }
+
+
+@app.get("/api/music/{music_id}/metadata")
+async def get_music_metadata(music_id: str):
+    """Obtém metadados de uma música específica"""
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute(
+            "SELECT * FROM music_metadata WHERE music_id = ?", (music_id,)
+        ) as cursor:
+            row = await cursor.fetchone()
+            if row:
+                return dict(row)
+            return None
+
+
+@app.get("/api/music/metadata/all")
+async def get_all_music_metadata():
+    """Obtém metadados de todas as músicas classificadas"""
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute(
+            """SELECT m.*, mm.artist, mm.title, mm.album, mm.genre, mm.year, mm.obs, mm.classified_at
+               FROM music m
+               LEFT JOIN music_metadata mm ON m.id = mm.music_id
+               ORDER BY m.created_at DESC"""
+        ) as cursor:
+            rows = await cursor.fetchall()
+            return [dict(row) for row in rows]
+
+
+@app.post("/api/ai/classify/{music_id}")
+async def classify_music(music_id: str):
+    """Classifica uma música usando IA via OpenRouter"""
+    if not OPENROUTER_API_KEY:
+        raise HTTPException(status_code=500, detail="API Key do OpenRouter não configurada. Configure OPENROUTER_API_KEY no .env")
+
+    # Buscar música
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute("SELECT * FROM music WHERE id = ?", (music_id,)) as cursor:
+            music = await cursor.fetchone()
+            if not music:
+                raise HTTPException(status_code=404, detail="Música não encontrada")
+
+    filename = music["original_name"]
+
+    # Prompt para a IA
+    prompt = f"""Analise o nome deste arquivo de áudio e extraia as informações da música.
+
+Nome do arquivo: {filename}
+
+Retorne APENAS um JSON válido com o seguinte formato (sem markdown, sem código, apenas o JSON puro):
+{{
+    "artist": "Nome do artista ou banda",
+    "title": "Título da música",
+    "album": "Nome do álbum (se identificável, senão null)",
+    "genre": "Gênero musical (se identificável, senão null)",
+    "year": "Ano (se identificável, senão null)",
+    "obs": "Observações adicionais sobre a música ou artista (curiosidades, se conhecer)"
+}}
+
+Regras:
+- Se o nome do arquivo contiver "artista - música", separe corretamente
+- Se não conseguir identificar algum campo, use null
+- Tente identificar o gênero musical se conhecer a música/artista
+- Em "obs" você pode adicionar informações interessantes sobre a música se a conhecer
+- Responda APENAS com o JSON, nada mais"""
+
+    async with httpx.AsyncClient(timeout=60.0) as client:
+        try:
+            response = await client.post(
+                "https://openrouter.ai/api/v1/chat/completions",
+                headers={
+                    "Authorization": f"Bearer {OPENROUTER_API_KEY}",
+                    "Content-Type": "application/json",
+                    "HTTP-Referer": "https://falavipmusic.com",
+                    "X-Title": "FalaVIP Music Player"
+                },
+                json={
+                    "model": OPENROUTER_MODEL,
+                    "messages": [
+                        {"role": "user", "content": prompt}
+                    ],
+                    "temperature": 0.3
+                }
+            )
+            response.raise_for_status()
+            data = response.json()
+
+            # Extrair resposta
+            ai_response = data.get("choices", [{}])[0].get("message", {}).get("content", "")
+
+            # Tentar parsear o JSON da resposta
+            try:
+                # Limpar possíveis marcadores de código
+                clean_response = ai_response.strip()
+                if clean_response.startswith("```json"):
+                    clean_response = clean_response[7:]
+                if clean_response.startswith("```"):
+                    clean_response = clean_response[3:]
+                if clean_response.endswith("```"):
+                    clean_response = clean_response[:-3]
+                clean_response = clean_response.strip()
+
+                metadata = json.loads(clean_response)
+            except json.JSONDecodeError:
+                # Se não conseguir parsear, tentar extrair campos manualmente
+                metadata = {
+                    "artist": None,
+                    "title": filename,
+                    "album": None,
+                    "genre": None,
+                    "year": None,
+                    "obs": f"Não foi possível classificar automaticamente. Resposta da IA: {ai_response[:200]}"
+                }
+
+            # Salvar no banco de dados
+            async with aiosqlite.connect(DB_PATH) as db:
+                await db.execute(
+                    """INSERT OR REPLACE INTO music_metadata
+                       (music_id, artist, title, album, genre, year, obs, raw_response, classified_at)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                    (
+                        music_id,
+                        metadata.get("artist"),
+                        metadata.get("title"),
+                        metadata.get("album"),
+                        metadata.get("genre"),
+                        metadata.get("year"),
+                        metadata.get("obs"),
+                        ai_response,
+                        datetime.now().isoformat()
+                    )
+                )
+                await db.commit()
+
+            return {
+                "success": True,
+                "music_id": music_id,
+                "filename": filename,
+                "metadata": metadata
+            }
+
+        except httpx.HTTPStatusError as e:
+            error_detail = "Erro na API OpenRouter"
+            try:
+                error_json = e.response.json()
+                error_detail = error_json.get("error", {}).get("message", str(e))
+            except:
+                pass
+            raise HTTPException(status_code=e.response.status_code, detail=error_detail)
+        except httpx.HTTPError as e:
+            raise HTTPException(status_code=500, detail=f"Erro de conexão: {str(e)}")
+
+
+from sse_starlette.sse import EventSourceResponse
+
+@app.get("/api/ai/classify-all-stream")
+async def classify_all_music_stream(request: Request, batch_size: int = 5):
+    """Classifica todas as músicas não classificadas com progresso em tempo real (SSE)"""
+    if not OPENROUTER_API_KEY:
+        raise HTTPException(status_code=500, detail="API Key do OpenRouter não configurada")
+
+    async def event_generator():
+        async with aiosqlite.connect(DB_PATH) as db:
+            db.row_factory = aiosqlite.Row
+            async with db.execute(
+                """SELECT m.id, m.original_name FROM music m
+                   LEFT JOIN music_metadata mm ON m.id = mm.music_id
+                   WHERE mm.music_id IS NULL"""
+            ) as cursor:
+                unclassified = await cursor.fetchall()
+
+        total = len(unclassified)
+
+        if total == 0:
+            yield {
+                "event": "complete",
+                "data": json.dumps({"total": 0, "classified": 0, "failed": 0, "message": "Nenhuma música para classificar"})
+            }
+            return
+
+        classified = 0
+        failed = 0
+
+        # Enviar início
+        yield {
+            "event": "start",
+            "data": json.dumps({"total": total, "message": f"Iniciando classificação de {total} músicas..."})
+        }
+
+        # Processar em batches paralelos
+        for i in range(0, total, batch_size):
+            # Verificar se cliente desconectou
+            if await request.is_disconnected():
+                return
+
+            batch = unclassified[i:i + batch_size]
+
+            # Criar tasks para processamento paralelo
+            tasks = []
+            for music in batch:
+                tasks.append(classify_single_music_with_result(music["id"], music["original_name"]))
+
+            # Executar batch em paralelo
+            results = await asyncio.gather(*tasks)
+
+            # Processar resultados e enviar progresso
+            for result in results:
+                if result["success"]:
+                    classified += 1
+                else:
+                    failed += 1
+
+                # Enviar progresso para cada música
+                yield {
+                    "event": "progress",
+                    "data": json.dumps({
+                        "current": classified + failed,
+                        "total": total,
+                        "classified": classified,
+                        "failed": failed,
+                        "percent": round(((classified + failed) / total) * 100),
+                        "music_name": result["name"],
+                        "artist": result.get("artist"),
+                        "title": result.get("title"),
+                        "success": result["success"],
+                        "error": result.get("error")
+                    })
+                }
+
+        # Enviar conclusão
+        yield {
+            "event": "complete",
+            "data": json.dumps({
+                "total": total,
+                "classified": classified,
+                "failed": failed,
+                "message": f"Concluído! {classified} classificadas, {failed} falhas"
+            })
+        }
+
+    return EventSourceResponse(event_generator())
+
+
+async def classify_single_music_with_result(music_id: str, music_name: str) -> dict:
+    """Classifica uma música e retorna resultado detalhado"""
+    try:
+        result = await classify_music(music_id)
+        metadata = result.get("metadata", {})
+        print(f"✓ Classificado: {music_name} -> {metadata.get('artist')} - {metadata.get('title')}")
+        return {
+            "success": True,
+            "name": music_name,
+            "artist": metadata.get("artist"),
+            "title": metadata.get("title"),
+            "genre": metadata.get("genre")
+        }
+    except Exception as e:
+        print(f"✗ Erro ao classificar {music_name}: {e}")
+        return {
+            "success": False,
+            "name": music_name,
+            "error": str(e)
+        }
+
+
+@app.put("/api/music/{music_id}/metadata")
+async def update_music_metadata(music_id: str, data: MusicMetadataUpdate):
+    """Atualiza metadados de uma música manualmente"""
+    async with aiosqlite.connect(DB_PATH) as db:
+        # Verificar se música existe
+        db.row_factory = aiosqlite.Row
+        async with db.execute("SELECT id FROM music WHERE id = ?", (music_id,)) as cursor:
+            if not await cursor.fetchone():
+                raise HTTPException(status_code=404, detail="Música não encontrada")
+
+        # Verificar se já existe metadados
+        async with db.execute("SELECT music_id FROM music_metadata WHERE music_id = ?", (music_id,)) as cursor:
+            exists = await cursor.fetchone()
+
+        if exists:
+            # Atualizar
+            await db.execute(
+                """UPDATE music_metadata SET
+                   artist = COALESCE(?, artist),
+                   title = COALESCE(?, title),
+                   album = COALESCE(?, album),
+                   genre = COALESCE(?, genre),
+                   year = COALESCE(?, year),
+                   obs = COALESCE(?, obs),
+                   classified_at = ?
+                   WHERE music_id = ?""",
+                (data.artist, data.title, data.album, data.genre, data.year, data.obs,
+                 datetime.now().isoformat(), music_id)
+            )
+        else:
+            # Inserir
+            await db.execute(
+                """INSERT INTO music_metadata (music_id, artist, title, album, genre, year, obs, classified_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                (music_id, data.artist, data.title, data.album, data.genre, data.year, data.obs,
+                 datetime.now().isoformat())
+            )
+
+        await db.commit()
+
+    return {"success": True, "music_id": music_id}
+
+
+@app.delete("/api/music/{music_id}/metadata")
+async def delete_music_metadata(music_id: str):
+    """Remove metadados de uma música (permite reclassificar)"""
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute("DELETE FROM music_metadata WHERE music_id = ?", (music_id,))
+        await db.commit()
+    return {"success": True, "music_id": music_id}
+
+
+@app.delete("/api/ai/clear-all-metadata")
+async def clear_all_metadata():
+    """Limpa TODOS os metadados (permite reclassificar tudo)"""
+    async with aiosqlite.connect(DB_PATH) as db:
+        result = await db.execute("SELECT COUNT(*) FROM music_metadata")
+        count = (await result.fetchone())[0]
+        await db.execute("DELETE FROM music_metadata")
+        await db.commit()
+    return {"success": True, "deleted": count}
+
+
+@app.get("/api/music/artists")
+async def get_artists():
+    """Lista todos os artistas únicos"""
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute(
+            """SELECT DISTINCT artist, COUNT(*) as count
+               FROM music_metadata
+               WHERE artist IS NOT NULL AND artist != ''
+               GROUP BY artist
+               ORDER BY artist"""
+        ) as cursor:
+            rows = await cursor.fetchall()
+            return [{"artist": row["artist"], "count": row["count"]} for row in rows]
+
+
+@app.get("/api/music/genres")
+async def get_genres():
+    """Lista todos os gêneros únicos"""
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute(
+            """SELECT DISTINCT genre, COUNT(*) as count
+               FROM music_metadata
+               WHERE genre IS NOT NULL AND genre != ''
+               GROUP BY genre
+               ORDER BY genre"""
+        ) as cursor:
+            rows = await cursor.fetchall()
+            return [{"genre": row["genre"], "count": row["count"]} for row in rows]
+
+
+@app.get("/api/music/by-artist/{artist}")
+async def get_music_by_artist(artist: str):
+    """Lista músicas de um artista específico"""
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute(
+            """SELECT m.*, mm.artist, mm.title, mm.album, mm.genre, mm.year, mm.obs
+               FROM music m
+               JOIN music_metadata mm ON m.id = mm.music_id
+               WHERE mm.artist = ?
+               ORDER BY mm.title""",
+            (artist,)
+        ) as cursor:
+            rows = await cursor.fetchall()
+            return [dict(row) for row in rows]
+
+
+@app.get("/api/music/by-genre/{genre}")
+async def get_music_by_genre(genre: str):
+    """Lista músicas de um gênero específico"""
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute(
+            """SELECT m.*, mm.artist, mm.title, mm.album, mm.genre, mm.year, mm.obs
+               FROM music m
+               JOIN music_metadata mm ON m.id = mm.music_id
+               WHERE mm.genre = ?
+               ORDER BY mm.artist, mm.title""",
+            (genre,)
+        ) as cursor:
+            rows = await cursor.fetchall()
+            return [dict(row) for row in rows]
+
+
 # ============ WEBSOCKET ============
 
 @app.websocket("/ws")
@@ -1759,5 +2476,6 @@ if __name__ == "__main__":
     print("\n" + "="*50)
     print("SERVIDOR INICIADO!")
     print("Acesse no navegador: http://localhost:8000")
+    print("Auto-reload ativado - alterações reiniciam o servidor")
     print("="*50 + "\n")
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)

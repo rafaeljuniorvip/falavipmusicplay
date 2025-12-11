@@ -257,6 +257,38 @@ class ApiService {
     });
   }
 
+  // Audio Mixing (TTS + Background Music)
+  async generateMixedAudio(options) {
+    return this.post('/tts/mix', {
+      text: options.text,
+      voice_id: options.voiceId,
+      model_id: options.modelId || 'eleven_multilingual_v2',
+      stability: options.stability || 0.5,
+      similarity_boost: options.similarityBoost || 0.75,
+      background_music_id: options.backgroundMusicId,
+      intro_duration: options.introDuration || 5.0,
+      outro_duration: options.outroDuration || 5.0,
+      fade_out_duration: options.fadeOutDuration || 3.0,
+      music_volume: options.musicVolume || 1.0,
+      music_ducking_volume: options.musicDuckingVolume || 0.2,
+      voice_volume: options.voiceVolume || 1.0,
+      fade_duration: options.fadeDuration || 0.5,
+      name: options.name || null,
+      is_ad: options.isAd !== undefined ? options.isAd : true,
+    });
+  }
+
+  async previewMixTiming(backgroundMusicId, textLength, introDuration, outroDuration, fadeOutDuration) {
+    const params = new URLSearchParams({
+      background_music_id: backgroundMusicId,
+      text_length: textLength,
+      intro_duration: introDuration,
+      outro_duration: outroDuration,
+      fade_out_duration: fadeOutDuration,
+    });
+    return this.get(`/tts/mix/preview-timing?${params}`);
+  }
+
   async addScheduledSong(musicId, time) {
     return this.post('/settings/scheduled-song', {
       music_id: musicId,

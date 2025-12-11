@@ -2142,6 +2142,260 @@ tr:last-child td {
     color: var(--gold-dark);
 }
 
+/* ============ AI CLASSIFICATION & GROUP BY ============ */
+.groupby-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    margin-bottom: 1rem;
+    padding: 0.75rem 1rem;
+    background: white;
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow);
+}
+
+.groupby-label {
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: var(--text-secondary);
+}
+
+.groupby-buttons {
+    display: flex;
+    gap: 0.5rem;
+}
+
+.groupby-btn {
+    padding: 0.5rem 1rem;
+    border: 1px solid var(--border);
+    background: white;
+    border-radius: var(--radius);
+    cursor: pointer;
+    font-size: 0.8125rem;
+    font-weight: 500;
+    color: var(--text-secondary);
+    transition: all 0.2s;
+}
+
+.groupby-btn:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+}
+
+.groupby-btn.active {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: white;
+}
+
+.groupby-select {
+    margin-left: auto;
+}
+
+.groupby-select .form-select {
+    min-width: 200px;
+}
+
+/* Song name styling in table */
+.song-name {
+    font-weight: 500;
+    color: var(--text-dark);
+}
+
+.song-filename {
+    font-size: 0.75rem;
+    margin-top: 0.25rem;
+}
+
+.text-muted {
+    color: var(--text-secondary);
+    font-size: 0.875rem;
+}
+
+/* Highlight button for unclassified */
+.btn-icon.highlight {
+    animation: pulse-highlight 2s infinite;
+}
+
+@keyframes pulse-highlight {
+    0%, 100% {
+        transform: scale(1);
+        opacity: 1;
+    }
+    50% {
+        transform: scale(1.1);
+        opacity: 0.8;
+    }
+}
+
+/* AI Status indicator */
+.ai-status {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.8125rem;
+    padding: 0.5rem 1rem;
+    background: rgba(139, 0, 0, 0.05);
+    border-radius: var(--radius);
+}
+
+.ai-status.configured {
+    background: rgba(34, 197, 94, 0.1);
+    color: var(--success);
+}
+
+.ai-status.not-configured {
+    background: rgba(239, 68, 68, 0.1);
+    color: var(--danger);
+}
+
+/* Classify all button when disabled */
+#btn-classify-all:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+#btn-classify-all:disabled:hover {
+    background: transparent;
+    color: var(--text-secondary);
+}
+
+/* Danger outline button */
+.btn-danger-outline {
+    border-color: var(--danger) !important;
+    color: var(--danger) !important;
+}
+
+.btn-danger-outline:hover {
+    background: rgba(198, 40, 40, 0.1) !important;
+}
+
+/* Music table specific styles */
+.music-table {
+    table-layout: fixed;
+    width: 100%;
+}
+
+.music-table td:first-child,
+.music-table td:last-child {
+    white-space: nowrap;
+}
+
+.music-table td:first-child {
+    display: flex;
+    gap: 0.25rem;
+}
+
+.music-table .btn-icon {
+    flex-shrink: 0;
+    width: 32px;
+    height: 32px;
+    padding: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+/* ============ CLASSIFY PROGRESS MODAL ============ */
+#classify-progress-modal .modal-content {
+    max-width: 500px;
+}
+
+.progress-stats {
+    text-align: center;
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: var(--bg-dark);
+    margin-bottom: 1rem;
+}
+
+.progress-percent {
+    font-size: 1rem;
+    color: var(--text-secondary);
+    font-weight: 500;
+}
+
+.progress-bar-container {
+    width: 100%;
+    height: 24px;
+    background: var(--bg-light);
+    border-radius: 12px;
+    overflow: hidden;
+    margin-bottom: 1rem;
+    border: 1px solid var(--border);
+}
+
+.progress-bar-fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--accent), var(--gold));
+    border-radius: 12px;
+    transition: width 0.3s ease;
+}
+
+.progress-details {
+    margin-bottom: 1rem;
+}
+
+.progress-counts {
+    display: flex;
+    justify-content: center;
+    gap: 2rem;
+    margin-bottom: 0.75rem;
+    font-size: 1rem;
+    font-weight: 600;
+}
+
+.progress-counts .success-count {
+    color: var(--success);
+}
+
+.progress-counts .fail-count {
+    color: var(--danger);
+}
+
+.progress-current-item {
+    text-align: center;
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+    padding: 0.5rem;
+    background: var(--bg-light);
+    border-radius: var(--radius);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.progress-log {
+    max-height: 150px;
+    overflow-y: auto;
+    margin-top: 1rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+}
+
+.progress-log .log-entry {
+    padding: 0.5rem 0.75rem;
+    font-size: 0.8125rem;
+    border-bottom: 1px solid var(--border);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.progress-log .log-entry:last-child {
+    border-bottom: none;
+}
+
+.progress-log .log-entry.success {
+    background: rgba(34, 197, 94, 0.1);
+    color: var(--success);
+}
+
+.progress-log .log-entry.error {
+    background: rgba(239, 68, 68, 0.1);
+    color: var(--danger);
+}
+
 @media (max-width: 768px) {
     .sidebar {
         width: 80px;
