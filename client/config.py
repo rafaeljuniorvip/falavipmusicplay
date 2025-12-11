@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 
 # URL do servidor padrão
-DEFAULT_SERVER_URL = "http://localhost:8000"
+DEFAULT_SERVER_URL = "https://falavipmusic.viptecnologia.com.br"
 
 def load_settings():
     """Carrega configurações do arquivo settings.json"""

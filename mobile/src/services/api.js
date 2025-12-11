@@ -1,7 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const STORAGE_KEY = '@falavip_server_url';
-const DEFAULT_URL = 'http://192.168.18.102:8000';
+const DEFAULT_URL = 'https://falavipmusic.viptecnologia.com.br';
 
 class ApiService {
   constructor() {

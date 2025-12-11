@@ -170,14 +170,27 @@ class SplashScreen:
         """Fecha a splash screen"""
         self.root.destroy()
 
+    def update_status_safe(self, message: str, progress: int = None):
+        """Atualiza status de forma thread-safe"""
+        def do_update():
+            self.status_label.config(text=message)
+            if progress is not None:
+                self.progress['value'] = progress
+        self.root.after(0, do_update)
+
     def run_with_callback(self, callback):
         """Executa callback e mantém splash visível"""
+        self.callback_done = False
+        self.callback_error = None
+
         def run():
             try:
                 callback(self)
             except Exception as e:
+                self.callback_error = str(e)
                 print(f"Erro no carregamento: {e}")
             finally:
+                self.callback_done = True
                 self.root.after(500, self.close)
 
         threading.Thread(target=run, daemon=True).start()

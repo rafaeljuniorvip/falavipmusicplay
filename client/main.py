@@ -404,11 +404,15 @@ class FalaVIPPlayer:
 
     def _start_components(self):
         """Inicia componentes e GUI"""
-        if self.sync.is_offline:
-            self.gui.update_sync_info(f"⚠️ MODO OFFLINE | {len(self.player.playlist)} músicas em cache")
-            self.gui.update_status(False, "Offline - Usando cache")
-        else:
-            self.gui.update_sync_info(f"✓ {len(self.player.playlist)} músicas na playlist")
+        # Atualizar info depois que o mainloop iniciar
+        def update_initial_info():
+            if self.sync.is_offline:
+                self.gui.update_sync_info(f"⚠️ MODO OFFLINE | {len(self.player.playlist)} músicas em cache")
+                self.gui.update_status(False, "Offline - Usando cache")
+            else:
+                self.gui.update_sync_info(f"✓ {len(self.player.playlist)} músicas na playlist")
+
+        self.gui.root.after(100, update_initial_info)
 
         # Iniciar componentes
         self.player.start_monitoring()
@@ -472,15 +476,24 @@ def main():
     def load_app(splash_screen):
         nonlocal app, load_error
         try:
-            splash_screen.update_status("Inicializando componentes...", 10)
+            splash_screen.update_status_safe("Inicializando componentes...", 10)
 
             # Criar instância do player
             app = FalaVIPPlayer()
 
-            splash_screen.update_status("Sincronizando músicas...", 30)
+            # Callback para mostrar progresso do download
+            def on_download_progress(filename, current, total):
+                # Truncar nome se muito longo
+                display_name = filename[:35] + "..." if len(filename) > 38 else filename
+                progress = 30 + int((current / max(total, 1)) * 20)  # 30-50%
+                splash_screen.update_status_safe(f"Baixando ({current}/{total}): {display_name}", progress)
+
+            app.sync.on_download_progress = on_download_progress
+
+            splash_screen.update_status_safe("Verificando músicas...", 25)
             app.sync.sync()
 
-            splash_screen.update_status("Carregando agendamentos...", 50)
+            splash_screen.update_status_safe("Carregando agendamentos...", 55)
             schedules = app.sync.sync_schedules()
             if schedules:
                 app.scheduler.update_schedules(
@@ -490,26 +503,35 @@ def main():
                     schedules.get('hourly_volumes', {})
                 )
 
-            splash_screen.update_status("Preparando playlist...", 70)
+            splash_screen.update_status_safe("Preparando playlist...", 75)
             music_files = app.sync.get_music_files()
             app.player.load_playlist(shuffle=True, music_files=music_files)
 
-            splash_screen.update_status("Conectando ao servidor...", 85)
+            splash_screen.update_status_safe("Finalizando...", 90)
             # WebSocket será conectado depois
 
-            splash_screen.update_status("Pronto!", 100)
+            splash_screen.update_status_safe("Pronto!", 100)
 
         except Exception as e:
             load_error = str(e)
             print(f"Erro no carregamento: {e}")
+            import traceback
+            traceback.print_exc()
 
     # Executar carregamento com splash
     splash.run_with_callback(load_app)
 
     # Se houve erro, mostrar mensagem
     if load_error:
-        import tkinter.messagebox as mb
-        mb.showerror("Erro", f"Falha ao iniciar:\n{load_error}")
+        try:
+            import tkinter as tk
+            root = tk.Tk()
+            root.withdraw()
+            from tkinter import messagebox
+            messagebox.showerror("Erro", f"Falha ao iniciar:\n{load_error}")
+            root.destroy()
+        except:
+            pass
         return
 
     # Se não carregou o app, sair
@@ -520,10 +542,18 @@ def main():
     try:
         app.start_gui_only()
     except KeyboardInterrupt:
-        app.stop()
+        try:
+            app.stop()
+        except:
+            pass
     except Exception as e:
         print(f"Erro: {e}")
-        app.stop()
+        import traceback
+        traceback.print_exc()
+        try:
+            app.stop()
+        except:
+            pass
 
 
 if __name__ == "__main__":

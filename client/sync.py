@@ -42,6 +42,7 @@ class MusicSync:
         self.on_sync_complete: Optional[Callable[[int, int], None]] = None
         self.on_sync_error: Optional[Callable[[str], None]] = None
         self.on_schedules_updated: Optional[Callable[[dict], None]] = None
+        self.on_download_progress: Optional[Callable[[str, int, int], None]] = None  # (filename, current, total)
 
         # Thread de sincronização
         self._sync_thread: Optional[threading.Thread] = None
@@ -190,11 +191,24 @@ class MusicSync:
         # Limpar lista de ads e reconstruir
         self.ad_files.clear()
 
+        # Contar quantas músicas precisam ser baixadas
+        files_to_download = [f for f in server_files.keys() if f not in local_files]
+        total_to_download = len(files_to_download)
+        current_download = 0
+
         # Baixar músicas novas
         for filename, music_info in server_files.items():
             if filename not in local_files:
+                current_download += 1
+                # Notificar progresso do download
+                if self.on_download_progress:
+                    self.on_download_progress(filename, current_download, total_to_download)
+
                 if self.download_music(music_info['id'], filename):
                     downloaded += 1
+            else:
+                # Arquivo já existe localmente - não precisa baixar
+                print(f"Já existe: {filename}")
 
             # Atualizar mapeamento mesmo se já existe
             filepath = self.music_folder / filename
