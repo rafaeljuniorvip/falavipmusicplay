@@ -843,13 +843,13 @@ export default function AudioCreateScreen({ navigation }) {
                   <View style={styles.mixSettingRow}>
                     <Text style={styles.mixSettingLabel}>Volume música durante fala: {Math.round(musicDuckingVolume * 100)}%</Text>
                     <View style={styles.mixSliderRow}>
-                      <TouchableOpacity onPress={() => setMusicDuckingVolume(Math.max(0.1, musicDuckingVolume - 0.1))}>
+                      <TouchableOpacity onPress={() => setMusicDuckingVolume(Math.max(0.05, Math.round((musicDuckingVolume - 0.01) * 100) / 100))}>
                         <Text style={styles.sliderBtn}>−</Text>
                       </TouchableOpacity>
                       <View style={styles.sliderTrack}>
                         <View style={[styles.sliderFill, { width: `${musicDuckingVolume * 100}%` }]} />
                       </View>
-                      <TouchableOpacity onPress={() => setMusicDuckingVolume(Math.min(0.5, musicDuckingVolume + 0.1))}>
+                      <TouchableOpacity onPress={() => setMusicDuckingVolume(Math.min(0.5, Math.round((musicDuckingVolume + 0.01) * 100) / 100))}>
                         <Text style={styles.sliderBtn}>+</Text>
                       </TouchableOpacity>
                     </View>
@@ -1424,7 +1424,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   discardGeneratedBtn: {
-    backgroundColor: colors.surface,
+    backgroundColor: 'transparent',
     padding: spacing.md,
     borderRadius: borderRadius.md,
     alignItems: 'center',

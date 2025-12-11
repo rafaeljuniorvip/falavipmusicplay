@@ -1,0 +1,28 @@
+version: "3.8"
+
+services:
+  falavip-mobile-dev:
+    build:
+      context: ./mobile
+      dockerfile: Dockerfile
+    networks:
+      - minha_rede
+    environment:
+      - EXPO_DEVTOOLS_LISTEN_ADDRESS=0.0.0.0
+      - REACT_NATIVE_PACKAGER_HOSTNAME=0.0.0.0
+    stdin_open: true
+    tty: true
+    deploy:
+      mode: replicated
+      replicas: 1
+      placement:
+        constraints:
+          - node.role == manager
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+
+networks:
+  minha_rede:
+    external: true
