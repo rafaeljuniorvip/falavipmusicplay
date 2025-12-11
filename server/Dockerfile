@@ -2,8 +2,9 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-# Instalar dependências do sistema
+# Instalar dependências do sistema (FFmpeg para mixagem de áudio)
 RUN apt-get update && apt-get install -y --no-install-recommends \
+    ffmpeg \
     && rm -rf /var/lib/apt/lists/*
 
 # Copiar requirements e instalar dependências Python
