@@ -27,24 +27,32 @@ from gui import PlayerGUI
 
 
 class FalaVIPPlayer:
-    def __init__(self):
+    def __init__(self, create_gui=True):
         # Diretório base
         self.base_dir = Path(__file__).parent
         self.music_dir = self.base_dir / MUSIC_FOLDER
 
-        # Componentes
+        # Componentes (GUI é criada separadamente se create_gui=False)
         self.player = MusicPlayer(str(self.music_dir))
         self.sync = MusicSync(SERVER_URL, str(self.music_dir), SYNC_INTERVAL)
         self.scheduler = Scheduler()
         self.ws_client = NativeWebSocketClient(WEBSOCKET_URL)
-        self.gui = PlayerGUI()
+        self.gui = None
 
         # Estado
         self.is_running = True
         self.use_server_playlist = True  # Usar playlist do servidor quando disponível
         self.current_playlist_position = None  # Posição atual na playlist do servidor
 
-        self._setup_callbacks()
+        if create_gui:
+            self.gui = PlayerGUI()
+            self._setup_callbacks()
+
+    def init_gui(self):
+        """Inicializa a GUI (deve ser chamado na main thread)"""
+        if self.gui is None:
+            self.gui = PlayerGUI()
+            self._setup_callbacks()
 
     def _get_next_from_server(self) -> bool:
         """Tenta obter próxima música do servidor e definir no player"""
@@ -490,9 +498,9 @@ def main():
             log_error("load_app iniciado")
             splash_screen.update_status_safe("Inicializando componentes...", 10)
 
-            # Criar instância do player
+            # Criar instância do player SEM GUI (GUI será criada na main thread depois)
             log_error("Criando instância FalaVIPPlayer")
-            app = FalaVIPPlayer()
+            app = FalaVIPPlayer(create_gui=False)
 
             # Callback para mostrar progresso do download
             def on_download_progress(filename, current, total):
@@ -568,6 +576,8 @@ def main():
 
     # Iniciar a aplicação principal (sem o carregamento inicial)
     try:
+        log_error("Criando GUI na main thread...")
+        app.init_gui()
         log_error("Iniciando GUI...")
         app.start_gui_only()
     except KeyboardInterrupt:

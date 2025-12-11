@@ -247,6 +247,10 @@ export default function PlayerScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
+  // Guarda o último volume que enviamos para o servidor
+  const lastSentVolume = useRef(null);
+  const volumeAdjustTimeout = useRef(null);
+
   const pulseAnim = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
@@ -275,13 +279,30 @@ export default function PlayerScreen() {
   const fetchStatus = useCallback(async () => {
     try {
       const data = await api.getPlayerStatus();
-      setStatus({
-        currentSong: data.current_song,
-        isPlaying: data.is_playing,
-        volume: data.volume || 0.5,
-        position: data.position || 0,
-        duration: data.duration || 0,
-        remaining: data.remaining || 0,
+      const serverVolume = data.volume || 0.5;
+
+      setStatus(prev => {
+        // Se temos um volume pendente que acabamos de enviar, e o servidor ainda não refletiu,
+        // mantemos o valor local. Caso contrário, aceitamos o valor do servidor.
+        let newVolume = serverVolume;
+        if (lastSentVolume.current !== null) {
+          // Se o servidor retornou um valor muito próximo do que enviamos, limpa o pending
+          if (Math.abs(serverVolume - lastSentVolume.current) < 0.02) {
+            lastSentVolume.current = null;
+          } else {
+            // Servidor ainda não refletiu nossa mudança, manter valor local
+            newVolume = prev.volume;
+          }
+        }
+
+        return {
+          currentSong: data.current_song,
+          isPlaying: data.is_playing,
+          volume: newVolume,
+          position: data.position || 0,
+          duration: data.duration || 0,
+          remaining: data.remaining || 0,
+        };
       });
       setConnected(true);
     } catch (error) {
@@ -306,15 +327,31 @@ export default function PlayerScreen() {
 
     const unsubStatus = websocket.on('playerStatus', (data) => {
       if (data.current_song !== undefined) {
-        setStatus(prev => ({
-          ...prev,
-          currentSong: data.current_song,
-          isPlaying: data.is_playing ?? prev.isPlaying,
-          volume: data.volume ?? prev.volume,
-          position: data.position ?? prev.position,
-          duration: data.duration ?? prev.duration,
-          remaining: data.remaining ?? prev.remaining,
-        }));
+        setStatus(prev => {
+          const serverVolume = data.volume ?? prev.volume;
+
+          // Se temos um volume pendente que acabamos de enviar
+          let newVolume = serverVolume;
+          if (lastSentVolume.current !== null) {
+            // Se o servidor retornou um valor muito próximo do que enviamos, limpa o pending
+            if (Math.abs(serverVolume - lastSentVolume.current) < 0.02) {
+              lastSentVolume.current = null;
+            } else {
+              // Servidor ainda não refletiu nossa mudança, manter valor local
+              newVolume = prev.volume;
+            }
+          }
+
+          return {
+            ...prev,
+            currentSong: data.current_song,
+            isPlaying: data.is_playing ?? prev.isPlaying,
+            volume: newVolume,
+            position: data.position ?? prev.position,
+            duration: data.duration ?? prev.duration,
+            remaining: data.remaining ?? prev.remaining,
+          };
+        });
       }
     });
 
@@ -325,6 +362,9 @@ export default function PlayerScreen() {
       unsubDisconnect();
       unsubStatus();
       clearInterval(interval);
+      if (volumeAdjustTimeout.current) {
+        clearTimeout(volumeAdjustTimeout.current);
+      }
     };
   }, [fetchStatus]);
 
@@ -361,14 +401,30 @@ export default function PlayerScreen() {
   };
 
   const handleVolumeChange = async (value) => {
+    // Cancela timeout anterior se existir
+    if (volumeAdjustTimeout.current) {
+      clearTimeout(volumeAdjustTimeout.current);
+    }
+
+    // Guarda o valor que estamos enviando
+    lastSentVolume.current = value;
+
     setStatus(prev => ({ ...prev, volume: value }));
   };
 
   const handleVolumeComplete = async (value) => {
     try {
+      // Guarda o valor final enviado
+      lastSentVolume.current = value;
       await api.setVolume(value);
+
+      // Após 3 segundos, limpa o pending para aceitar qualquer valor do servidor
+      volumeAdjustTimeout.current = setTimeout(() => {
+        lastSentVolume.current = null;
+      }, 3000);
     } catch (error) {
       console.error('Volume error:', error);
+      lastSentVolume.current = null;
     }
   };
 
