@@ -4,7 +4,7 @@ services:
   falavipmusicplay:
     image: ghcr.io/rafaeljuniorvip/falavipmusicplay:latest
     networks:
-      - traefik-public
+      - minha_rede
     volumes:
       - falavipmusicplay_storage:/app/storage
       - falavipmusicplay_db:/app/data
@@ -17,12 +17,12 @@ services:
         constraints:
           - node.role == manager
       labels:
-        - traefik.enable=true
-        - traefik.docker.network=traefik-public
-        - traefik.http.routers.falavipmusicplay.rule=Host(`falavipmusicplay.seudominio.com`)
-        - traefik.http.routers.falavipmusicplay.entrypoints=websecure
-        - traefik.http.routers.falavipmusicplay.tls.certresolver=letsencrypt
-        - traefik.http.services.falavipmusicplay.loadbalancer.server.port=8000
+        - "traefik.enable=true"
+        - "traefik.http.routers.falavipmusicplay.entrypoints=websecure"
+        - "traefik.http.routers.falavipmusicplay.rule=Host(`falavipmusic.viptecnologia.com.br`)"
+        - "traefik.http.routers.falavipmusicplay.service=falavipmusicplay-service"
+        - "traefik.http.routers.falavipmusicplay.tls.certresolver=letsencryptresolver"
+        - "traefik.http.services.falavipmusicplay-service.loadbalancer.server.port=8000"
       restart_policy:
         condition: on-failure
         delay: 5s
@@ -35,5 +35,5 @@ volumes:
     driver: local
 
 networks:
-  traefik-public:
+  minha_rede:
     external: true

@@ -86,9 +86,10 @@ class NativeWebSocketClient:
         self.on_play: Optional[Callable[[], None]] = None
         self.on_pause: Optional[Callable[[], None]] = None
         self.on_skip: Optional[Callable[[], None]] = None
-        self.on_schedule_updated: Optional[Callable[[], None]] = None
+        self.on_schedule_updated: Optional[Callable[[dict], None]] = None  # Recebe dados completos de schedules
         self.on_music_updated: Optional[Callable[[], None]] = None
         self.on_init: Optional[Callable[[dict], None]] = None
+        self.on_playlist_updated: Optional[Callable[[dict], None]] = None  # Quando playlist é atualizada/regenerada
 
         # Configurações recebidas do servidor
         self.settings: dict = {}
@@ -125,12 +126,18 @@ class NativeWebSocketClient:
                 self.on_skip()
 
         elif msg_type == 'schedule_updated':
+            # Passa dados completos de schedules (volume_schedules, ad_schedules, scheduled_songs, hourly_volumes)
             if self.on_schedule_updated:
-                self.on_schedule_updated()
+                self.on_schedule_updated(message)
 
         elif msg_type == 'music_added' or msg_type == 'music_deleted':
             if self.on_music_updated:
                 self.on_music_updated()
+
+        elif msg_type == 'playlist_updated' or msg_type == 'playlist_generated':
+            # Playlist foi atualizada/regenerada no servidor
+            if self.on_playlist_updated:
+                self.on_playlist_updated(message)
 
     def _connection_loop(self):
         """Loop de conexão WebSocket"""
@@ -166,7 +173,8 @@ class NativeWebSocketClient:
             if self._running:
                 time.sleep(5)  # Aguardar antes de reconectar
 
-    def send_status(self, current_song: str, is_playing: bool, volume: float):
+    def send_status(self, current_song: str, is_playing: bool, volume: float,
+                     position: float = 0, duration: float = 0, remaining: float = 0):
         """Envia status do player para o servidor"""
         if self._ws and self.connected:
             try:
@@ -174,7 +182,10 @@ class NativeWebSocketClient:
                     "type": "player_status",
                     "current_song": current_song,
                     "is_playing": is_playing,
-                    "volume": volume
+                    "volume": volume,
+                    "position": position,
+                    "duration": duration,
+                    "remaining": remaining
                 }
                 self._ws.send(json.dumps(message))
             except Exception as e:

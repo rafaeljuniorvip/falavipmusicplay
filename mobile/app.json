@@ -1,0 +1,45 @@
+{
+  "expo": {
+    "name": "Natal Iluminado 2025",
+    "slug": "natal-iluminado-2025",
+    "version": "1.0.0",
+    "sdkVersion": "54.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "dark",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#1a0505"
+    },
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.pontovip.nataliluminado"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#1a0505"
+      },
+      "package": "com.pontovip.nataliluminado"
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      "expo-asset",
+      "expo-font",
+      "expo-audio"
+    ],
+    "extra": {
+      "eventName": "Natal Iluminado",
+      "eventYear": "2025",
+      "city": "Itapecerica",
+      "state": "MG",
+      "management": "Papelaria Ponto VIP"
+    }
+  }
+}

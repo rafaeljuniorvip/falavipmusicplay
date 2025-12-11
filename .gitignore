@@ -53,3 +53,19 @@ server/data/
 # Client music (keep structure)
 client/music/*
 !client/music/.gitkeep
+
+# Client cache files
+client/*_cache.json
+client/*.spec
+
+# Server secrets
+server/.env
+
+# Mobile
+mobile/node_modules/
+mobile/.expo/
+mobile/ios/
+mobile/android/
+
+# Claude
+.claude/

@@ -1,809 +1,819 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>FalaVIP Music Player - Controle</title>
-    <style>
-        * {
-            box-sizing: border-box;
-            margin: 0;
-            padding: 0;
-        }
-
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
-            color: #fff;
-            min-height: 100vh;
-            padding: 20px;
-        }
-
-        .container {
-            max-width: 1200px;
-            margin: 0 auto;
-        }
-
-        header {
-            text-align: center;
-            padding: 20px 0;
-            margin-bottom: 30px;
-        }
-
-        header h1 {
-            font-size: 2rem;
-            background: linear-gradient(90deg, #00d9ff, #00ff88);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
-        }
-
-        .status-bar {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 10px;
-            margin-top: 10px;
-        }
-
-        .status-indicator {
-            width: 12px;
-            height: 12px;
-            border-radius: 50%;
-            background: #ff4444;
-        }
-
-        .status-indicator.connected {
-            background: #00ff88;
-            animation: pulse 2s infinite;
-        }
-
-        @keyframes pulse {
-            0%, 100% { opacity: 1; }
-            50% { opacity: 0.5; }
-        }
-
-        .grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
-            gap: 20px;
-        }
-
-        .card {
-            background: rgba(255, 255, 255, 0.05);
-            border-radius: 16px;
-            padding: 20px;
-            backdrop-filter: blur(10px);
-            border: 1px solid rgba(255, 255, 255, 0.1);
-        }
-
-        .card h2 {
-            font-size: 1.2rem;
-            margin-bottom: 20px;
-            color: #00d9ff;
-            display: flex;
-            align-items: center;
-            gap: 10px;
-        }
-
-        /* Player Controls */
-        .now-playing {
-            text-align: center;
-            padding: 20px;
-            background: rgba(0, 217, 255, 0.1);
-            border-radius: 12px;
-            margin-bottom: 20px;
-        }
-
-        .now-playing .song-title {
-            font-size: 1.1rem;
-            font-weight: 600;
-            margin-bottom: 5px;
-        }
-
-        .now-playing .song-status {
-            color: #888;
-            font-size: 0.9rem;
-        }
-
-        .player-controls {
-            display: flex;
-            justify-content: center;
-            gap: 15px;
-            margin-bottom: 20px;
-        }
-
-        .player-controls button {
-            width: 50px;
-            height: 50px;
-            border-radius: 50%;
-            border: none;
-            background: rgba(255, 255, 255, 0.1);
-            color: #fff;
-            font-size: 1.2rem;
-            cursor: pointer;
-            transition: all 0.3s;
-        }
-
-        .player-controls button:hover {
-            background: #00d9ff;
-            transform: scale(1.1);
-        }
-
-        /* Volume Control */
-        .volume-control {
-            display: flex;
-            align-items: center;
-            gap: 15px;
-        }
-
-        .volume-control input[type="range"] {
-            flex: 1;
-            height: 8px;
-            border-radius: 4px;
-            background: rgba(255, 255, 255, 0.2);
-            -webkit-appearance: none;
-        }
-
-        .volume-control input[type="range"]::-webkit-slider-thumb {
-            -webkit-appearance: none;
-            width: 20px;
-            height: 20px;
-            border-radius: 50%;
-            background: #00d9ff;
-            cursor: pointer;
-        }
-
-        .volume-value {
-            min-width: 50px;
-            text-align: right;
-            font-weight: bold;
-        }
-
-        /* Tables */
-        .schedule-list {
-            max-height: 300px;
-            overflow-y: auto;
-        }
-
-        .schedule-item {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 12px;
-            background: rgba(255, 255, 255, 0.05);
-            border-radius: 8px;
-            margin-bottom: 8px;
-        }
-
-        .schedule-item:hover {
-            background: rgba(255, 255, 255, 0.1);
-        }
-
-        .schedule-info {
-            flex: 1;
-        }
-
-        .schedule-time {
-            font-weight: bold;
-            color: #00ff88;
-        }
-
-        .btn-delete {
-            background: rgba(255, 68, 68, 0.2);
-            color: #ff4444;
-            border: none;
-            padding: 8px 12px;
-            border-radius: 6px;
-            cursor: pointer;
-        }
-
-        .btn-delete:hover {
-            background: rgba(255, 68, 68, 0.4);
-        }
-
-        /* Forms */
-        .form-group {
-            margin-bottom: 15px;
-        }
-
-        .form-group label {
-            display: block;
-            margin-bottom: 5px;
-            color: #888;
-            font-size: 0.9rem;
-        }
-
-        .form-group input, .form-group select {
-            width: 100%;
-            padding: 10px;
-            border-radius: 8px;
-            border: 1px solid rgba(255, 255, 255, 0.2);
-            background: rgba(255, 255, 255, 0.05);
-            color: #fff;
-            font-size: 1rem;
-        }
-
-        .form-row {
-            display: flex;
-            gap: 10px;
-        }
-
-        .form-row .form-group {
-            flex: 1;
-        }
-
-        .btn-primary {
-            width: 100%;
-            padding: 12px;
-            background: linear-gradient(90deg, #00d9ff, #00ff88);
-            border: none;
-            border-radius: 8px;
-            color: #1a1a2e;
-            font-weight: bold;
-            font-size: 1rem;
-            cursor: pointer;
-            transition: transform 0.2s;
-        }
-
-        .btn-primary:hover {
-            transform: translateY(-2px);
-        }
-
-        /* Music List */
-        .music-list {
-            max-height: 400px;
-            overflow-y: auto;
-        }
-
-        .music-item {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 12px;
-            background: rgba(255, 255, 255, 0.05);
-            border-radius: 8px;
-            margin-bottom: 8px;
-            cursor: pointer;
-            transition: all 0.2s;
-        }
-
-        .music-item:hover {
-            background: rgba(0, 217, 255, 0.2);
-        }
-
-        .music-item.is-ad {
-            border-left: 3px solid #ff9800;
-        }
-
-        .music-name {
-            flex: 1;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-        }
-
-        .music-actions {
-            display: flex;
-            gap: 8px;
-        }
-
-        .btn-small {
-            padding: 6px 10px;
-            border-radius: 4px;
-            border: none;
-            cursor: pointer;
-            font-size: 0.85rem;
-        }
-
-        .btn-play-next {
-            background: rgba(0, 255, 136, 0.2);
-            color: #00ff88;
-        }
-
-        /* Upload */
-        .upload-area {
-            border: 2px dashed rgba(255, 255, 255, 0.3);
-            border-radius: 12px;
-            padding: 30px;
-            text-align: center;
-            cursor: pointer;
-            transition: all 0.3s;
-            margin-bottom: 15px;
-        }
-
-        .upload-area:hover {
-            border-color: #00d9ff;
-            background: rgba(0, 217, 255, 0.1);
-        }
-
-        .upload-area input {
-            display: none;
-        }
-
-        .checkbox-group {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            margin-bottom: 15px;
-        }
-
-        .checkbox-group input[type="checkbox"] {
-            width: 20px;
-            height: 20px;
-        }
-
-        /* Toast Notifications */
-        .toast {
-            position: fixed;
-            bottom: 20px;
-            right: 20px;
-            background: #00ff88;
-            color: #1a1a2e;
-            padding: 15px 25px;
-            border-radius: 8px;
-            font-weight: bold;
-            transform: translateX(150%);
-            transition: transform 0.3s;
-        }
-
-        .toast.show {
-            transform: translateX(0);
-        }
-
-        .toast.error {
-            background: #ff4444;
-            color: #fff;
-        }
-    </style>
+    <title>FalaVIP | Music Manager</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="static/css/style.css">
 </head>
+
 <body>
-    <div class="container">
-        <header>
-            <h1>FalaVIP Music Player</h1>
-            <div class="status-bar">
-                <div class="status-indicator" id="statusIndicator"></div>
-                <span id="statusText">Desconectado</span>
+
+    <!-- Sidebar -->
+    <aside class="sidebar">
+        <div class="logo">
+            <span>FalaVIP</span> Manager
+        </div>
+
+        <ul class="nav-links">
+            <li class="nav-item active" data-view="dashboard">
+                <i>📊</i> <span>Dashboard</span>
+            </li>
+            <li class="nav-item" data-view="music">
+                <i>🎵</i> <span>Biblioteca</span>
+            </li>
+            <li class="nav-item" data-view="schedules">
+                <i>📅</i> <span>Agendamentos</span>
+            </li>
+            <li class="nav-item" data-view="preview">
+                <i>👁</i> <span>Preview</span>
+            </li>
+            <li class="nav-item" data-view="logs">
+                <i>📋</i> <span>Logs</span>
+            </li>
+            <li class="nav-item" data-view="settings">
+                <i>⚙️</i> <span>Configurações</span>
+            </li>
+        </ul>
+
+        <!-- Mini Player no Sidebar -->
+        <div class="sidebar-player">
+            <div class="sidebar-player-info">
+                <span class="sidebar-now-playing">Tocando:</span>
+                <span class="sidebar-song-name" id="sidebar-song-name">-</span>
+            </div>
+            <div class="sidebar-player-controls">
+                <button class="sidebar-btn" id="sidebar-btn-prev" title="Anterior">⏮</button>
+                <button class="sidebar-btn primary" id="sidebar-btn-play" title="Play">▶</button>
+                <button class="sidebar-btn" id="sidebar-btn-pause" title="Pausar" style="display:none">⏸</button>
+                <button class="sidebar-btn" id="sidebar-btn-skip" title="Próxima">⏭</button>
+            </div>
+        </div>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="main-content">
+        <!-- Header -->
+        <header class="header">
+            <div class="header-left">
+                <h1 class="page-title" id="page-title">Painel de Controle</h1>
+                <span class="page-subtitle" id="page-subtitle"></span>
+            </div>
+            <div class="header-right">
+                <div id="connection-status" class="connection-badge offline">
+                    <span class="status-dot"></span>
+                    <span class="status-text">Offline</span>
+                </div>
             </div>
         </header>
 
-        <div class="grid">
-            <!-- Player Control -->
-            <div class="card">
-                <h2>🎵 Player</h2>
-                <div class="now-playing">
-                    <div class="song-title" id="currentSong">Nenhuma música</div>
-                    <div class="song-status" id="playingStatus">Parado</div>
+        <!-- Views -->
+
+        <!-- DASHBOARD VIEW -->
+        <section id="view-dashboard" class="view-section active">
+            <!-- Stats Cards -->
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-icon blue">🎵</div>
+                    <div class="stat-info">
+                        <h3>Músicas</h3>
+                        <p id="stat-total-songs">0</p>
+                    </div>
                 </div>
+                <div class="stat-card">
+                    <div class="stat-icon orange">📢</div>
+                    <div class="stat-info">
+                        <h3>Propagandas</h3>
+                        <p id="stat-total-ads">0</p>
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon green">📅</div>
+                    <div class="stat-info">
+                        <h3>Agendamentos</h3>
+                        <p id="stat-active-schedules">0</p>
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon purple">🔊</div>
+                    <div class="stat-info">
+                        <h3>Volume Atual</h3>
+                        <p id="stat-volume">50%</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Player Card -->
+            <div class="player-card">
+                <div class="player-card-header">
+                    <h2>Tocando Agora</h2>
+                    <span class="player-status" id="player-status-badge">Pausado</span>
+                </div>
+
+                <div class="player-main">
+                    <div class="player-artwork">
+                        <div class="artwork-placeholder">🎵</div>
+                    </div>
+                    <div class="player-info">
+                        <div class="current-song" id="current-song-name">Nenhuma música</div>
+                        <div class="next-song">
+                            <span class="next-label">Próxima:</span>
+                            <span id="next-song-name">-</span>
+                        </div>
+                    </div>
+                </div>
+
                 <div class="player-controls">
-                    <button onclick="playerPause()" title="Pausar">⏸️</button>
-                    <button onclick="playerPlay()" title="Play">▶️</button>
-                    <button onclick="playerSkip()" title="Próxima">⏭️</button>
+                    <button class="btn-control" id="btn-prev" title="Anterior">⏮</button>
+                    <button class="btn-control" id="btn-pause" style="display: none;">⏸</button>
+                    <button class="btn-control primary" id="btn-play">▶</button>
+                    <button class="btn-control" id="btn-skip" title="Próxima">⏭</button>
                 </div>
+
+                <!-- Progress Bar -->
+                <div class="player-progress">
+                    <div class="progress-time">
+                        <span id="player-time-current">0:00</span>
+                        <span id="player-time-remaining">-0:00</span>
+                    </div>
+                    <div class="progress-bar">
+                        <div class="progress-fill" id="player-progress-fill" style="width: 0%"></div>
+                    </div>
+                    <div class="progress-duration">
+                        <span id="player-time-total">0:00</span>
+                    </div>
+                </div>
+
                 <div class="volume-control">
-                    <span>🔊</span>
-                    <input type="range" id="volumeSlider" min="0" max="100" value="50" oninput="updateVolume(this.value)">
-                    <span class="volume-value" id="volumeValue">50%</span>
+                    <span class="volume-icon">🔈</span>
+                    <input type="range" id="volume-slider" min="0" max="100" value="50">
+                    <span class="volume-value" id="volume-value">50%</span>
                 </div>
             </div>
 
-            <!-- Volume Schedules -->
-            <div class="card">
-                <h2>📅 Agendamento de Volume</h2>
-                <div class="schedule-list" id="volumeScheduleList">
-                    <!-- Itens serão adicionados via JS -->
+            <!-- Quick Actions + Mini Preview -->
+            <div class="dashboard-grid">
+                <div class="quick-actions card">
+                    <h3>Ações Rápidas</h3>
+                    <div class="quick-actions-buttons">
+                        <button class="btn btn-outline" onclick="navigateTo('music')">
+                            <span>📤</span> Upload Música
+                        </button>
+                        <button class="btn btn-outline" onclick="navigateTo('schedules')">
+                            <span>📢</span> Nova Propaganda
+                        </button>
+                        <button class="btn btn-outline" onclick="navigateTo('schedules'); setTimeout(() => switchScheduleTab('songs'), 100)">
+                            <span>🎵</span> Agendar Música
+                        </button>
+                    </div>
                 </div>
-                <hr style="border-color: rgba(255,255,255,0.1); margin: 15px 0;">
-                <form onsubmit="addVolumeSchedule(event)">
-                    <div class="form-row">
+
+                <div class="upcoming-events card">
+                    <h3>Próximos Eventos</h3>
+                    <div id="upcoming-events-list" class="events-list">
+                        <div class="loading-placeholder">Carregando...</div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- MUSIC VIEW -->
+        <section id="view-music" class="view-section">
+            <!-- Toolbar -->
+            <div class="toolbar">
+                <div class="toolbar-left">
+                    <div class="search-box">
+                        <span class="search-icon">🔍</span>
+                        <input type="text" id="music-search" placeholder="Buscar músicas...">
+                    </div>
+                    <div class="filter-buttons">
+                        <button class="filter-btn active" data-filter="all">Todos</button>
+                        <button class="filter-btn" data-filter="music">Músicas</button>
+                        <button class="filter-btn" data-filter="ad">Propagandas</button>
+                    </div>
+                </div>
+                <div class="toolbar-right">
+                    <input type="file" id="file-upload" style="display: none" accept="audio/*" multiple>
+                    <button class="btn btn-primary" onclick="document.getElementById('file-upload').click()">
+                        <span>+</span> Upload
+                    </button>
+                </div>
+            </div>
+
+            <!-- Upload Drop Zone -->
+            <div id="drop-zone" class="drop-zone">
+                <div class="drop-zone-content">
+                    <span class="drop-icon">📁</span>
+                    <p>Arraste arquivos aqui ou clique para selecionar</p>
+                    <span class="drop-hint">MP3, WAV, OGG, FLAC, M4A</span>
+                </div>
+                <input type="file" id="drop-zone-input" accept="audio/*" multiple>
+            </div>
+
+            <!-- Music Table -->
+            <div class="table-container">
+                <table>
+                    <thead>
+                        <tr>
+                            <th style="width: 70px"></th>
+                            <th>Nome</th>
+                            <th style="width: 120px">Tipo</th>
+                            <th style="width: 80px">Duração</th>
+                            <th style="width: 100px">Data</th>
+                            <th style="width: 100px">Ações</th>
+                        </tr>
+                    </thead>
+                    <tbody id="music-table-body">
+                        <!-- Dynamic Content -->
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Edit Music Modal -->
+            <div id="edit-music-modal" class="modal">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h3>Editar Áudio</h3>
+                        <button class="modal-close" onclick="closeEditModal()">&times;</button>
+                    </div>
+                    <div class="modal-body">
                         <div class="form-group">
-                            <label>Início</label>
-                            <input type="time" id="scheduleStart" required>
+                            <label>Nome do arquivo</label>
+                            <input type="text" id="edit-music-name" class="form-input" readonly>
                         </div>
                         <div class="form-group">
-                            <label>Fim</label>
-                            <input type="time" id="scheduleEnd" required>
-                        </div>
-                        <div class="form-group">
-                            <label>Volume</label>
-                            <input type="number" id="scheduleVolume" min="0" max="100" value="50" required>
+                            <label>Tipo</label>
+                            <div class="toggle-group">
+                                <button class="toggle-btn" data-type="music" id="toggle-music">🎵 Música</button>
+                                <button class="toggle-btn" data-type="ad" id="toggle-ad">📢 Propaganda</button>
+                            </div>
                         </div>
                     </div>
-                    <button type="submit" class="btn-primary">Adicionar Agendamento</button>
-                </form>
+                    <div class="modal-footer">
+                        <button class="btn" onclick="closeEditModal()">Cancelar</button>
+                        <button class="btn btn-primary" onclick="saveEditMusic()">Salvar</button>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- SCHEDULES VIEW -->
+        <section id="view-schedules" class="view-section">
+            <!-- Tabs -->
+            <div class="schedule-tabs">
+                <button class="schedule-tab active" data-tab="ads">📢 Propagandas</button>
+                <button class="schedule-tab" data-tab="volume">🔊 Volume por Hora</button>
+                <button class="schedule-tab" data-tab="periods">⏱️ Períodos</button>
+                <button class="schedule-tab" data-tab="songs">🎵 Músicas Agendadas</button>
             </div>
 
-            <!-- Ad Schedules -->
-            <div class="card">
-                <h2>📢 Propagandas Agendadas</h2>
-                <div class="schedule-list" id="adScheduleList">
-                    <!-- Itens serão adicionados via JS -->
+            <!-- ADS TAB -->
+            <div id="tab-ads" class="tab-content active">
+                <div class="table-container">
+                    <div class="table-header">
+                        <div>
+                            <h2>Propagandas Agendadas</h2>
+                            <p class="table-subtitle">As propagandas tocam em rotação sequencial</p>
+                        </div>
+                        <button class="btn btn-primary" id="btn-add-ad">
+                            <span>+</span> Nova Propaganda
+                        </button>
+                    </div>
+
+                    <!-- Add/Edit Ad Form -->
+                    <div id="ad-form" class="form-card" style="display: none;">
+                        <input type="hidden" id="ad-edit-id">
+                        <div class="form-row">
+                            <div class="form-group flex-2">
+                                <label>Áudio da Propaganda</label>
+                                <select id="ad-music-select" class="form-select">
+                                    <option value="">Selecione um áudio...</option>
+                                </select>
+                            </div>
+                            <div class="form-group flex-1">
+                                <label id="interval-label">Intervalo</label>
+                                <input type="number" id="ad-interval" class="form-input" min="1" value="30">
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label>Tipo de Intervalo</label>
+                            <div class="radio-group">
+                                <label class="radio-label">
+                                    <input type="radio" name="interval-type" value="minutes" checked>
+                                    <span class="radio-custom"></span>
+                                    <span>A cada X <strong>minutos</strong></span>
+                                </label>
+                                <label class="radio-label">
+                                    <input type="radio" name="interval-type" value="songs">
+                                    <span class="radio-custom"></span>
+                                    <span>A cada X <strong>músicas</strong></span>
+                                </label>
+                            </div>
+                        </div>
+                        <div class="form-actions">
+                            <button class="btn" id="btn-cancel-ad">Cancelar</button>
+                            <button class="btn btn-primary" id="btn-save-ad">Salvar</button>
+                        </div>
+                    </div>
+
+                    <table>
+                        <thead>
+                            <tr>
+                                <th style="width: 60px">Ordem</th>
+                                <th>Áudio</th>
+                                <th style="width: 180px">Intervalo</th>
+                                <th style="width: 100px">Status</th>
+                                <th style="width: 140px">Ações</th>
+                            </tr>
+                        </thead>
+                        <tbody id="ad-table-body">
+                            <!-- Dynamic Content -->
+                        </tbody>
+                    </table>
                 </div>
-                <hr style="border-color: rgba(255,255,255,0.1); margin: 15px 0;">
-                <form onsubmit="addAdSchedule(event)">
-                    <div class="form-group">
-                        <label>Música (Propaganda)</label>
-                        <select id="adMusic" required>
-                            <!-- Opções serão adicionadas via JS -->
+            </div>
+
+            <!-- VOLUME TAB -->
+            <div id="tab-volume" class="tab-content">
+                <div class="table-container volume-container">
+                    <div class="volume-header">
+                        <div>
+                            <h2>Volume por Hora</h2>
+                            <p class="table-subtitle">Arraste as barras para definir o volume. A hora atual está em verde.</p>
+                        </div>
+                        <div class="volume-presets">
+                            <button class="btn btn-sm" onclick="applyVolumePreset('full')">100% Total</button>
+                            <button class="btn btn-sm" onclick="applyVolumePreset('commercial')">Horário Comercial</button>
+                            <button class="btn btn-sm" onclick="applyVolumePreset('night')">Modo Noturno</button>
+                        </div>
+                    </div>
+
+                    <div class="volume-chart">
+                        <div class="volume-chart-labels">
+                            <span>100%</span>
+                            <span>75%</span>
+                            <span>50%</span>
+                            <span>25%</span>
+                            <span>0%</span>
+                        </div>
+                        <div class="volume-bars" id="volume-bars">
+                            <!-- 24 bars generated by JavaScript -->
+                        </div>
+                    </div>
+
+                    <div class="volume-hours-labels">
+                        <span>0h</span><span>1</span><span>2</span><span>3</span><span>4</span><span>5</span>
+                        <span>6</span><span>7</span><span>8</span><span>9</span><span>10</span><span>11</span>
+                        <span>12</span><span>13</span><span>14</span><span>15</span><span>16</span><span>17</span>
+                        <span>18</span><span>19</span><span>20</span><span>21</span><span>22</span><span>23h</span>
+                    </div>
+
+                    <div class="form-actions volume-actions">
+                        <button class="btn" onclick="renderVolumeChart()">Resetar</button>
+                        <button class="btn btn-primary" id="btn-save-volumes">Salvar Volumes</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- PERIODS TAB (Time-based Volume Schedules) -->
+            <div id="tab-periods" class="tab-content">
+                <div class="table-container">
+                    <div class="table-header">
+                        <div>
+                            <h2>Períodos de Volume</h2>
+                            <p class="table-subtitle">Ajuste de volume por período específico (HH:MM) - sobrepõe o volume por hora</p>
+                        </div>
+                        <button class="btn btn-primary" id="btn-add-period">
+                            <span>+</span> Novo Período
+                        </button>
+                    </div>
+
+                    <!-- Add/Edit Period Form -->
+                    <div id="period-form" class="form-card" style="display: none;">
+                        <input type="hidden" id="period-edit-id">
+                        <div class="form-row">
+                            <div class="form-group flex-1">
+                                <label>Horário Início</label>
+                                <input type="time" id="period-time-start" class="form-input" value="08:00">
+                            </div>
+                            <div class="form-group flex-1">
+                                <label>Horário Fim</label>
+                                <input type="time" id="period-time-end" class="form-input" value="18:00">
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label>Modo de Volume</label>
+                            <div class="gradient-toggle">
+                                <button type="button" class="gradient-toggle-btn active" id="period-mode-fixed">
+                                    📊 Fixo
+                                </button>
+                                <button type="button" class="gradient-toggle-btn gradient-type" id="period-mode-gradient">
+                                    📈 Gradativo
+                                </button>
+                            </div>
+                        </div>
+                        <!-- Fixed Volume -->
+                        <div id="period-fixed-inputs" class="form-group">
+                            <label>Volume: <span id="period-volume-display">50%</span></label>
+                            <input type="range" id="period-volume" class="form-slider" min="0" max="100" value="50">
+                        </div>
+                        <!-- Gradient Volume -->
+                        <div id="period-gradient-inputs" style="display: none;">
+                            <div class="gradient-preview">
+                                <div class="gradient-preview-bar gradient">
+                                    <div class="gradient-preview-labels">
+                                        <span id="gradient-preview-start">20%</span>
+                                        <span id="gradient-preview-end">80%</span>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="gradient-volume-inputs">
+                                <div class="form-group">
+                                    <label>Volume Inicial: <span id="period-volume-start-display">20%</span></label>
+                                    <input type="range" id="period-volume-start" class="form-slider" min="0" max="100" value="20">
+                                </div>
+                                <div class="form-group">
+                                    <label>Volume Final: <span id="period-volume-end-display">80%</span></label>
+                                    <input type="range" id="period-volume-end" class="form-slider" min="0" max="100" value="80">
+                                </div>
+                            </div>
+                        </div>
+                        <div class="form-actions">
+                            <button class="btn" id="btn-cancel-period">Cancelar</button>
+                            <button class="btn btn-primary" id="btn-save-period">Salvar</button>
+                        </div>
+                    </div>
+
+                    <table class="periods-table">
+                        <thead>
+                            <tr>
+                                <th>Início</th>
+                                <th>Fim</th>
+                                <th>Volume</th>
+                                <th style="width: 140px">Ações</th>
+                            </tr>
+                        </thead>
+                        <tbody id="periods-table-body">
+                            <!-- Dynamic Content -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- SCHEDULED SONGS TAB -->
+            <div id="tab-songs" class="tab-content">
+                <div class="table-container">
+                    <div class="table-header">
+                        <div>
+                            <h2>Músicas Agendadas</h2>
+                            <p class="table-subtitle">Músicas que tocam em horários específicos</p>
+                        </div>
+                        <button class="btn btn-primary" id="btn-add-song">
+                            <span>+</span> Agendar Música
+                        </button>
+                    </div>
+
+                    <!-- Add/Edit Song Form -->
+                    <div id="song-form" class="form-card" style="display: none;">
+                        <input type="hidden" id="song-edit-id">
+                        <div class="form-row">
+                            <div class="form-group flex-2">
+                                <label>Música</label>
+                                <select id="song-music-select" class="form-select">
+                                    <option value="">Selecione uma música...</option>
+                                </select>
+                            </div>
+                            <div class="form-group flex-1">
+                                <label>Horário</label>
+                                <input type="time" id="song-time" class="form-input">
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label class="checkbox-label">
+                                <input type="checkbox" id="song-repeat" checked>
+                                <span class="checkbox-custom"></span>
+                                <span>Repetir diariamente</span>
+                            </label>
+                        </div>
+                        <div class="form-actions">
+                            <button class="btn" id="btn-cancel-song">Cancelar</button>
+                            <button class="btn btn-primary" id="btn-save-song">Salvar</button>
+                        </div>
+                    </div>
+
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Música</th>
+                                <th style="width: 120px">Horário</th>
+                                <th style="width: 120px">Repetir</th>
+                                <th style="width: 140px">Ações</th>
+                            </tr>
+                        </thead>
+                        <tbody id="songs-table-body">
+                            <!-- Dynamic Content -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+        </section>
+
+        <!-- PREVIEW VIEW -->
+        <section id="view-preview" class="view-section">
+            <div class="preview-page">
+                <!-- Header -->
+                <div class="preview-page-header">
+                    <div>
+                        <h2>Simulação da Programação</h2>
+                        <p class="preview-subtitle">Visualize como será a sequência de reprodução nas próximas horas</p>
+                    </div>
+                    <div class="preview-controls">
+                        <select id="preview-hours" class="form-select" style="width: auto;">
+                            <option value="1">Próxima 1 hora</option>
+                            <option value="2">Próximas 2 horas</option>
+                            <option value="4">Próximas 4 horas</option>
+                            <option value="6" selected>Próximas 6 horas</option>
+                            <option value="12">Próximas 12 horas</option>
+                            <option value="24">Próximas 24 horas</option>
                         </select>
+                        <button class="btn btn-primary" id="btn-refresh-preview">
+                            <span>🔄</span> Gerar Preview
+                        </button>
                     </div>
-                    <div class="form-group">
-                        <label>Intervalo (minutos)</label>
-                        <input type="number" id="adInterval" min="1" value="30" required>
+                </div>
+
+                <!-- Stats -->
+                <div class="preview-stats">
+                    <div class="preview-stat">
+                        <span class="preview-stat-icon">🎵</span>
+                        <span class="preview-stat-value" id="preview-stat-music">0</span>
+                        <span class="preview-stat-label">Músicas</span>
                     </div>
-                    <button type="submit" class="btn-primary">Adicionar Propaganda</button>
-                </form>
+                    <div class="preview-stat">
+                        <span class="preview-stat-icon">📢</span>
+                        <span class="preview-stat-value" id="preview-stat-ads">0</span>
+                        <span class="preview-stat-label">Propagandas</span>
+                    </div>
+                    <div class="preview-stat">
+                        <span class="preview-stat-icon">⏰</span>
+                        <span class="preview-stat-value" id="preview-stat-scheduled">0</span>
+                        <span class="preview-stat-label">Músicas Agendadas</span>
+                    </div>
+                    <div class="preview-stat">
+                        <span class="preview-stat-icon">🔊</span>
+                        <span class="preview-stat-value" id="preview-stat-volume">0</span>
+                        <span class="preview-stat-label">Mudanças de Volume</span>
+                    </div>
+                </div>
+
+                <!-- Timeline Visual -->
+                <div class="timeline-container card">
+                    <div class="timeline-header">
+                        <span>Agora</span>
+                        <span id="timeline-mark-1">+1h</span>
+                        <span id="timeline-mark-2">+2h</span>
+                        <span id="timeline-mark-3">+3h</span>
+                        <span id="timeline-mark-4">+4h</span>
+                    </div>
+                    <div class="timeline" id="schedule-timeline">
+                        <!-- Visual timeline generated by JavaScript -->
+                    </div>
+                    <div class="timeline-legend">
+                        <span class="legend-item"><span class="legend-dot random"></span> Música Aleatória</span>
+                        <span class="legend-item"><span class="legend-dot ad"></span> Propaganda</span>
+                        <span class="legend-item"><span class="legend-dot scheduled"></span> Música Agendada</span>
+                        <span class="legend-item"><span class="legend-dot volume"></span> Volume</span>
+                    </div>
+                </div>
+
+                <!-- Detailed Sequence -->
+                <div class="preview-sequence card">
+                    <div class="preview-sequence-header">
+                        <h3>Sequência de Reprodução</h3>
+                        <span id="preview-count" class="preview-count">0 itens</span>
+                    </div>
+                    <div class="preview-sequence-list" id="preview-list">
+                        <!-- Dynamic content -->
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- LOGS VIEW -->
+        <section id="view-logs" class="view-section">
+            <!-- Toolbar -->
+            <div class="toolbar">
+                <div class="toolbar-left">
+                    <div class="filter-buttons">
+                        <button class="filter-btn active" data-log-filter="all">Todos</button>
+                        <button class="filter-btn" data-log-filter="music">🎵 Músicas</button>
+                        <button class="filter-btn" data-log-filter="ad">📢 Propagandas</button>
+                        <button class="filter-btn" data-log-filter="volume_manual">🔊 Vol. Manual</button>
+                        <button class="filter-btn" data-log-filter="volume_scheduled">⏰ Vol. Agendado</button>
+                        <button class="filter-btn" data-log-filter="app">📱 App</button>
+                        <button class="filter-btn" data-log-filter="connection">🔗 Conexão</button>
+                    </div>
+                </div>
+                <div class="toolbar-right">
+                    <button class="btn btn-outline" onclick="refreshLogs()">
+                        <span>🔄</span> Atualizar
+                    </button>
+                    <button class="btn btn-danger" onclick="clearOldLogs()">
+                        <span>🗑️</span> Limpar Antigos
+                    </button>
+                </div>
             </div>
 
-            <!-- Scheduled Songs -->
-            <div class="card">
-                <h2>⏰ Músicas Agendadas</h2>
-                <div class="schedule-list" id="scheduledSongList">
-                    <!-- Itens serão adicionados via JS -->
+            <!-- Logs Stats -->
+            <div class="logs-stats">
+                <div class="log-stat">
+                    <span class="log-stat-icon">🎵</span>
+                    <span class="log-stat-value" id="log-stat-music">0</span>
+                    <span class="log-stat-label">Músicas Tocadas</span>
                 </div>
-                <hr style="border-color: rgba(255,255,255,0.1); margin: 15px 0;">
-                <form onsubmit="addScheduledSong(event)">
-                    <div class="form-group">
-                        <label>Música</label>
-                        <select id="songMusic" required>
-                            <!-- Opções serão adicionadas via JS -->
-                        </select>
-                    </div>
-                    <div class="form-group">
-                        <label>Horário</label>
-                        <input type="time" id="songTime" required>
-                    </div>
-                    <button type="submit" class="btn-primary">Agendar Música</button>
-                </form>
+                <div class="log-stat">
+                    <span class="log-stat-icon">📢</span>
+                    <span class="log-stat-value" id="log-stat-ad">0</span>
+                    <span class="log-stat-label">Propagandas</span>
+                </div>
+                <div class="log-stat">
+                    <span class="log-stat-icon">🔊</span>
+                    <span class="log-stat-value" id="log-stat-volume">0</span>
+                    <span class="log-stat-label">Ajustes de Volume</span>
+                </div>
             </div>
 
-            <!-- Music Library -->
-            <div class="card" style="grid-column: span 2;">
-                <h2>🎶 Biblioteca de Músicas</h2>
-                <div class="upload-area" onclick="document.getElementById('fileInput').click()">
-                    <input type="file" id="fileInput" accept="audio/*" multiple onchange="uploadFiles(this.files)">
-                    <p>📤 Clique ou arraste arquivos para fazer upload</p>
+            <!-- Logs Table -->
+            <div class="table-container logs-table-container">
+                <table>
+                    <thead>
+                        <tr>
+                            <th style="width: 180px">Data/Hora</th>
+                            <th style="width: 120px">Tipo</th>
+                            <th>Descrição</th>
+                            <th style="width: 200px">Detalhes</th>
+                        </tr>
+                    </thead>
+                    <tbody id="logs-table-body">
+                        <!-- Dynamic Content -->
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Pagination -->
+            <div class="pagination">
+                <button class="btn btn-sm" id="logs-prev-btn" disabled>← Anterior</button>
+                <span class="pagination-info">
+                    Página <span id="logs-current-page">1</span> de <span id="logs-total-pages">1</span>
+                </span>
+                <button class="btn btn-sm" id="logs-next-btn">Próxima →</button>
+            </div>
+        </section>
+
+        <!-- SETTINGS VIEW -->
+        <section id="view-settings" class="view-section">
+            <div class="settings-grid">
+                <!-- Server Status -->
+                <div class="card settings-card">
+                    <h3>📡 Status do Sistema</h3>
+                    <div class="settings-info">
+                        <div class="info-row">
+                            <span class="info-label">Servidor:</span>
+                            <span id="server-status" class="info-value status-online">Online</span>
+                        </div>
+                        <div class="info-row">
+                            <span class="info-label">Cliente:</span>
+                            <span id="client-status" class="info-value">-</span>
+                        </div>
+                        <div class="info-row">
+                            <span class="info-label">Músicas sincronizadas:</span>
+                            <span id="synced-count" class="info-value">-</span>
+                        </div>
+                        <div class="info-row">
+                            <span class="info-label">Última sincronização:</span>
+                            <span id="last-sync" class="info-value">-</span>
+                        </div>
+                    </div>
                 </div>
-                <div class="checkbox-group">
-                    <input type="checkbox" id="uploadAsAd">
-                    <label for="uploadAsAd">Marcar como propaganda</label>
+
+                <!-- Storage -->
+                <div class="card settings-card">
+                    <h3>💾 Armazenamento</h3>
+                    <div class="settings-info">
+                        <div class="info-row">
+                            <span class="info-label">Total de arquivos:</span>
+                            <span id="storage-files" class="info-value">-</span>
+                        </div>
+                        <div class="info-row">
+                            <span class="info-label">Músicas:</span>
+                            <span id="storage-music" class="info-value">-</span>
+                        </div>
+                        <div class="info-row">
+                            <span class="info-label">Propagandas:</span>
+                            <span id="storage-ads" class="info-value">-</span>
+                        </div>
+                    </div>
                 </div>
-                <div class="music-list" id="musicList">
-                    <!-- Itens serão adicionados via JS -->
+
+                <!-- Playlist Management -->
+                <div class="card settings-card">
+                    <h3>🎵 Gerenciamento de Playlist</h3>
+                    <p class="settings-description">Gere playlist com horários exatos baseados nas durações reais das músicas</p>
+                    <div class="settings-info" id="playlist-info">
+                        <div class="info-row">
+                            <span class="info-label">Status da Playlist:</span>
+                            <span id="playlist-status" class="info-value">-</span>
+                        </div>
+                        <div class="info-row">
+                            <span class="info-label">Total de Itens:</span>
+                            <span id="playlist-count" class="info-value">-</span>
+                        </div>
+                    </div>
+                    <div class="settings-actions">
+                        <button class="btn btn-outline" onclick="scanMusicDurations()">
+                            <span>⏱️</span> Escanear Durações
+                        </button>
+                        <button class="btn btn-primary" onclick="generatePlaylist()">
+                            <span>🔄</span> Gerar Playlist (24h)
+                        </button>
+                    </div>
                 </div>
+
+                <!-- Backup & Restore -->
+                <div class="card settings-card">
+                    <h3>📦 Backup & Restauração</h3>
+                    <p class="settings-description">Exporte ou importe suas configurações de agendamento</p>
+                    <div class="settings-actions">
+                        <button class="btn btn-outline" onclick="exportSchedules()">
+                            <span>📤</span> Exportar Agendamentos
+                        </button>
+                        <input type="file" id="import-file" style="display: none" accept=".json">
+                        <button class="btn btn-outline" onclick="document.getElementById('import-file').click()">
+                            <span>📥</span> Importar Agendamentos
+                        </button>
+                    </div>
+                </div>
+
+                <!-- About -->
+                <div class="card settings-card">
+                    <h3>ℹ️ Sobre</h3>
+                    <div class="settings-info">
+                        <div class="info-row">
+                            <span class="info-label">Versão:</span>
+                            <span class="info-value">1.0.0</span>
+                        </div>
+                        <div class="info-row">
+                            <span class="info-label">Desenvolvido por:</span>
+                            <span class="info-value">FalaVIP</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Danger Zone -->
+                <div class="card settings-card danger-zone">
+                    <h3>⚠️ Zona de Perigo</h3>
+                    <p class="settings-description">Ações irreversíveis. Use com cuidado!</p>
+                    <div class="settings-actions">
+                        <button class="btn btn-danger" onclick="clearAllSchedules()">
+                            Limpar Todos os Agendamentos
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+    </main>
+
+    <!-- Toast Container -->
+    <div id="toast-container" class="toast-container"></div>
+
+    <!-- Loading Overlay -->
+    <div id="loading-overlay" class="loading-overlay" style="display: none;">
+        <div class="loading-spinner"></div>
+        <p id="loading-text">Carregando...</p>
+    </div>
+
+    <!-- Confirm Modal -->
+    <div id="confirm-modal" class="modal">
+        <div class="modal-content modal-sm">
+            <div class="modal-header">
+                <h3 id="confirm-title">Confirmar</h3>
+            </div>
+            <div class="modal-body">
+                <p id="confirm-message">Tem certeza?</p>
+            </div>
+            <div class="modal-footer">
+                <button class="btn" onclick="closeConfirmModal(false)">Cancelar</button>
+                <button class="btn btn-danger" onclick="closeConfirmModal(true)">Confirmar</button>
             </div>
         </div>
     </div>
 
-    <div class="toast" id="toast"></div>
-
-    <script>
-        const API_URL = window.location.origin;
-        let ws;
-        let musicList = [];
-        let settings = {};
-
-        // WebSocket Connection
-        function connectWebSocket() {
-            const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-            ws = new WebSocket(`${wsProtocol}//${window.location.host}/ws`);
-
-            ws.onopen = () => {
-                updateStatus(true);
-            };
-
-            ws.onclose = () => {
-                updateStatus(false);
-                setTimeout(connectWebSocket, 3000);
-            };
-
-            ws.onmessage = (event) => {
-                const data = JSON.parse(event.data);
-                handleMessage(data);
-            };
-        }
-
-        function handleMessage(data) {
-            switch (data.type) {
-                case 'init':
-                    settings = data.settings;
-                    document.getElementById('volumeSlider').value = settings.volume * 100;
-                    document.getElementById('volumeValue').textContent = Math.round(settings.volume * 100) + '%';
-                    renderVolumeSchedules(settings.volume_schedules);
-                    renderAdSchedules(settings.ad_schedules);
-                    renderScheduledSongs(settings.scheduled_songs);
-                    updatePlayerStatus(settings.player_status);
-                    break;
-
-                case 'player_status':
-                    updatePlayerStatus(data);
-                    break;
-
-                case 'volume_change':
-                    document.getElementById('volumeSlider').value = data.volume * 100;
-                    document.getElementById('volumeValue').textContent = Math.round(data.volume * 100) + '%';
-                    break;
-
-                case 'music_added':
-                case 'music_deleted':
-                case 'schedule_updated':
-                    loadSettings();
-                    loadMusic();
-                    break;
-            }
-        }
-
-        function updateStatus(connected) {
-            const indicator = document.getElementById('statusIndicator');
-            const text = document.getElementById('statusText');
-
-            if (connected) {
-                indicator.classList.add('connected');
-                text.textContent = 'Conectado';
-            } else {
-                indicator.classList.remove('connected');
-                text.textContent = 'Desconectado';
-            }
-        }
-
-        function updatePlayerStatus(status) {
-            const songEl = document.getElementById('currentSong');
-            const statusEl = document.getElementById('playingStatus');
-
-            if (status.current_song) {
-                songEl.textContent = status.current_song;
-                statusEl.textContent = status.is_playing ? '▶️ Tocando' : '⏸️ Pausado';
-            } else {
-                songEl.textContent = 'Nenhuma música';
-                statusEl.textContent = status.connected ? 'Aguardando' : 'Player desconectado';
-            }
-        }
-
-        // API Calls
-        async function loadMusic() {
-            try {
-                const res = await fetch(`${API_URL}/api/music/list`);
-                musicList = await res.json();
-                renderMusicList();
-                updateMusicSelects();
-            } catch (e) {
-                console.error('Erro ao carregar músicas:', e);
-            }
-        }
-
-        async function loadSettings() {
-            try {
-                const res = await fetch(`${API_URL}/api/settings`);
-                settings = await res.json();
-                renderVolumeSchedules(settings.volume_schedules);
-                renderAdSchedules(settings.ad_schedules);
-                renderScheduledSongs(settings.scheduled_songs);
-            } catch (e) {
-                console.error('Erro ao carregar configurações:', e);
-            }
-        }
-
-        async function updateVolume(value) {
-            document.getElementById('volumeValue').textContent = value + '%';
-            try {
-                await fetch(`${API_URL}/api/settings/volume`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ volume: value / 100 })
-                });
-            } catch (e) {
-                showToast('Erro ao atualizar volume', true);
-            }
-        }
-
-        async function playerPlay() {
-            await fetch(`${API_URL}/api/player/play`, { method: 'POST' });
-        }
-
-        async function playerPause() {
-            await fetch(`${API_URL}/api/player/pause`, { method: 'POST' });
-        }
-
-        async function playerSkip() {
-            await fetch(`${API_URL}/api/player/skip`, { method: 'POST' });
-        }
-
-        async function playNext(musicId) {
-            await fetch(`${API_URL}/api/player/next`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ music_id: musicId })
-            });
-            showToast('Música será a próxima!');
-        }
-
-        async function deleteMusic(musicId) {
-            if (!confirm('Tem certeza que deseja excluir esta música?')) return;
-
-            try {
-                await fetch(`${API_URL}/api/music/${musicId}`, { method: 'DELETE' });
-                showToast('Música excluída!');
-                loadMusic();
-            } catch (e) {
-                showToast('Erro ao excluir música', true);
-            }
-        }
-
-        async function uploadFiles(files) {
-            const isAd = document.getElementById('uploadAsAd').checked;
-
-            for (const file of files) {
-                const formData = new FormData();
-                formData.append('file', file);
-
-                try {
-                    await fetch(`${API_URL}/api/music/upload?is_ad=${isAd}`, {
-                        method: 'POST',
-                        body: formData
-                    });
-                    showToast(`"${file.name}" enviado!`);
-                } catch (e) {
-                    showToast(`Erro ao enviar "${file.name}"`, true);
-                }
-            }
-
-            loadMusic();
-        }
-
-        async function addVolumeSchedule(event) {
-            event.preventDefault();
-
-            const data = {
-                time_start: document.getElementById('scheduleStart').value,
-                time_end: document.getElementById('scheduleEnd').value,
-                volume: document.getElementById('scheduleVolume').value / 100
-            };
-
-            try {
-                await fetch(`${API_URL}/api/settings/volume-schedule`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(data)
-                });
-                showToast('Agendamento adicionado!');
-                event.target.reset();
-            } catch (e) {
-                showToast('Erro ao adicionar agendamento', true);
-            }
-        }
-
-        async function deleteVolumeSchedule(id) {
-            await fetch(`${API_URL}/api/settings/volume-schedule/${id}`, { method: 'DELETE' });
-            showToast('Agendamento removido!');
-        }
-
-        async function addAdSchedule(event) {
-            event.preventDefault();
-
-            const data = {
-                music_id: document.getElementById('adMusic').value,
-                interval_minutes: parseInt(document.getElementById('adInterval').value),
-                enabled: true
-            };
-
-            try {
-                await fetch(`${API_URL}/api/settings/ad-schedule`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(data)
-                });
-                showToast('Propaganda agendada!');
-                event.target.reset();
-            } catch (e) {
-                showToast('Erro ao agendar propaganda', true);
-            }
-        }
-
-        async function deleteAdSchedule(id) {
-            await fetch(`${API_URL}/api/settings/ad-schedule/${id}`, { method: 'DELETE' });
-            showToast('Propaganda removida!');
-        }
-
-        async function addScheduledSong(event) {
-            event.preventDefault();
-
-            const data = {
-                music_id: document.getElementById('songMusic').value,
-                time: document.getElementById('songTime').value,
-                repeat_daily: true
-            };
-
-            try {
-                await fetch(`${API_URL}/api/settings/scheduled-song`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(data)
-                });
-                showToast('Música agendada!');
-                event.target.reset();
-            } catch (e) {
-                showToast('Erro ao agendar música', true);
-            }
-        }
-
-        async function deleteScheduledSong(id) {
-            await fetch(`${API_URL}/api/settings/scheduled-song/${id}`, { method: 'DELETE' });
-            showToast('Agendamento removido!');
-        }
-
-        // Render Functions
-        function renderMusicList() {
-            const container = document.getElementById('musicList');
-            container.innerHTML = musicList.map(music => `
-                <div class="music-item ${music.is_ad ? 'is-ad' : ''}">
-                    <span class="music-name">${music.is_ad ? '📢 ' : '🎵 '}${music.original_name}</span>
-                    <div class="music-actions">
-                        <button class="btn-small btn-play-next" onclick="playNext('${music.id}')">▶️ Próxima</button>
-                        <button class="btn-small btn-delete" onclick="deleteMusic('${music.id}')">🗑️</button>
-                    </div>
-                </div>
-            `).join('');
-        }
-
-        function updateMusicSelects() {
-            const adSelect = document.getElementById('adMusic');
-            const songSelect = document.getElementById('songMusic');
-
-            const options = musicList.map(m => `<option value="${m.id}">${m.original_name}</option>`).join('');
-
-            adSelect.innerHTML = options;
-            songSelect.innerHTML = options;
-        }
-
-        function renderVolumeSchedules(schedules) {
-            const container = document.getElementById('volumeScheduleList');
-            container.innerHTML = schedules.map(s => `
-                <div class="schedule-item">
-                    <div class="schedule-info">
-                        <span class="schedule-time">${s.time_start} - ${s.time_end}</span>
-                        <span> → Volume: ${Math.round(s.volume * 100)}%</span>
-                    </div>
-                    <button class="btn-delete" onclick="deleteVolumeSchedule(${s.id})">🗑️</button>
-                </div>
-            `).join('') || '<p style="color:#888;text-align:center;">Nenhum agendamento</p>';
-        }
-
-        function renderAdSchedules(schedules) {
-            const container = document.getElementById('adScheduleList');
-            container.innerHTML = schedules.map(s => `
-                <div class="schedule-item">
-                    <div class="schedule-info">
-                        <span class="schedule-time">A cada ${s.interval_minutes} min</span>
-                        <span> → ${s.original_name}</span>
-                    </div>
-                    <button class="btn-delete" onclick="deleteAdSchedule(${s.id})">🗑️</button>
-                </div>
-            `).join('') || '<p style="color:#888;text-align:center;">Nenhuma propaganda</p>';
-        }
-
-        function renderScheduledSongs(schedules) {
-            const container = document.getElementById('scheduledSongList');
-            container.innerHTML = schedules.map(s => `
-                <div class="schedule-item">
-                    <div class="schedule-info">
-                        <span class="schedule-time">${s.scheduled_time}</span>
-                        <span> → ${s.original_name}</span>
-                    </div>
-                    <button class="btn-delete" onclick="deleteScheduledSong(${s.id})">🗑️</button>
-                </div>
-            `).join('') || '<p style="color:#888;text-align:center;">Nenhuma música agendada</p>';
-        }
-
-        function showToast(message, isError = false) {
-            const toast = document.getElementById('toast');
-            toast.textContent = message;
-            toast.className = 'toast show' + (isError ? ' error' : '');
-            setTimeout(() => toast.className = 'toast', 3000);
-        }
-
-        // Initialize
-        connectWebSocket();
-        loadMusic();
-    </script>
+    <script src="static/js/api.js"></script>
+    <script src="static/js/app.js"></script>
 </body>
+
 </html>
