@@ -1758,6 +1758,10 @@ async def generate_mixed_audio(data: MixAudioRequest):
     import subprocess
     import tempfile
 
+    print(f"[MIX] Iniciando geração de vinheta...")
+    print(f"[MIX] Música de fundo: {data.background_music_id}")
+    print(f"[MIX] Texto: {data.text[:50]}...")
+
     if not ELEVENLABS_API_KEY:
         raise HTTPException(status_code=500, detail="API Key do ElevenLabs não configurada")
 
@@ -1773,9 +1777,11 @@ async def generate_mixed_audio(data: MixAudioRequest):
                 raise HTTPException(status_code=404, detail="Música de fundo não encontrada")
 
     bg_music_path = STORAGE_DIR / bg_music["filename"]
+    print(f"[MIX] Caminho da música: {bg_music_path}")
     if not bg_music_path.exists():
         raise HTTPException(status_code=404, detail="Arquivo de música não encontrado")
 
+    print(f"[MIX] Gerando TTS com ElevenLabs...")
     # Gerar TTS
     async with httpx.AsyncClient(timeout=60.0) as client:
         try:
@@ -1796,6 +1802,7 @@ async def generate_mixed_audio(data: MixAudioRequest):
             )
             response.raise_for_status()
             tts_content = response.content
+            print(f"[MIX] TTS gerado com sucesso, {len(tts_content)} bytes")
         except httpx.HTTPStatusError as e:
             error_detail = "Erro na API ElevenLabs"
             try:
@@ -1803,12 +1810,18 @@ async def generate_mixed_audio(data: MixAudioRequest):
                 error_detail = error_json.get("detail", {}).get("message", str(e))
             except:
                 pass
+            print(f"[MIX] Erro ElevenLabs: {error_detail}")
             raise HTTPException(status_code=e.response.status_code, detail=error_detail)
+        except Exception as e:
+            print(f"[MIX] Erro ao gerar TTS: {e}")
+            raise HTTPException(status_code=500, detail=f"Erro ao gerar TTS: {str(e)}")
 
     # Criar arquivos temporários
     with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as tts_file:
         tts_file.write(tts_content)
         tts_path = tts_file.name
+
+    print(f"[MIX] TTS salvo em: {tts_path}")
 
     try:
         # Obter duração do TTS
@@ -1820,7 +1833,9 @@ async def generate_mixed_audio(data: MixAudioRequest):
                 capture_output=True, text=True
             )
             tts_duration = float(result.stdout.strip())
-        except:
+            print(f"[MIX] Duração do TTS: {tts_duration}s")
+        except Exception as e:
+            print(f"[MIX] Erro ao obter duração do TTS: {e}, usando fallback 10s")
             tts_duration = 10  # Fallback
 
         # Calcular tempos
@@ -1852,33 +1867,32 @@ async def generate_mixed_audio(data: MixAudioRequest):
         # - Música: volume normal -> fade down -> volume baixo -> fade up -> volume normal -> fade out
         # - Voz: delay de intro_duration segundos, com volume configurado
 
-        # Pontos de mudança de volume na música:
-        # t=0: vol_normal
-        # t=intro: começa fade down
-        # t=intro+fade_time: vol_duck (durante TTS)
-        # t=intro+tts_duration: começa fade up
-        # t=intro+tts_duration+fade_time: vol_normal
-        # t=intro+tts_duration+outro: começa fade out
-        # t=total_duration: vol=0
+        # Tempos chave
+        t_duck_start = intro  # Quando começa a abaixar
+        t_duck_end = intro + tts_duration  # Quando começa a subir
+        t_fade_out_start = intro + tts_duration + outro  # Quando começa fade out final
 
-        t1 = intro  # Início do fade down
-        t2 = intro + fade_time  # Fim do fade down
-        t3 = intro + tts_duration  # Início do fade up
-        t4 = intro + tts_duration + fade_time  # Fim do fade up
-        t5 = intro + tts_duration + outro  # Início do fade out final
-        t6 = total_duration  # Fim
+        print(f"[MIX] Timeline: intro={intro}s, tts={tts_duration}s, outro={outro}s, fade_out={fade_out}s")
+        print(f"[MIX] Total duration: {total_duration}s")
+        print(f"[MIX] Volumes: normal={vol_normal}, duck={vol_duck}, voice={vol_voice}")
 
-        # Filter complex para FFmpeg
+        # Filter complex simplificado para FFmpeg
+        # Usar volume com expressão if/then para evitar NaN
+        volume_expr = (
+            f"if(lt(t,{t_duck_start}),{vol_normal},"  # Intro: volume normal
+            f"if(lt(t,{t_duck_start + fade_time}),{vol_normal}-({vol_normal}-{vol_duck})*(t-{t_duck_start})/{fade_time},"  # Fade down
+            f"if(lt(t,{t_duck_end}),{vol_duck},"  # Durante TTS: volume baixo
+            f"if(lt(t,{t_duck_end + fade_time}),{vol_duck}+({vol_normal}-{vol_duck})*(t-{t_duck_end})/{fade_time},"  # Fade up
+            f"if(lt(t,{t_fade_out_start}),{vol_normal},"  # Outro: volume normal
+            f"{vol_normal}*(1-(t-{t_fade_out_start})/{fade_out})"  # Fade out final
+            f")))))"
+        )
+
         filter_complex = (
             # Input 0: música de fundo, loop se necessário e cortar no tempo total
             f"[0:a]aloop=loop=-1:size=2e+09,atrim=0:{total_duration},"
-            # Aplicar curva de volume: normal -> duck -> normal -> fade out
-            f"volume='{vol_normal}':enable='lt(t,{t1})',"
-            f"volume='{vol_normal}-({vol_normal}-{vol_duck})*(t-{t1})/{fade_time}':enable='between(t,{t1},{t2})',"
-            f"volume='{vol_duck}':enable='between(t,{t2},{t3})',"
-            f"volume='{vol_duck}+({vol_normal}-{vol_duck})*(t-{t3})/{fade_time}':enable='between(t,{t3},{t4})',"
-            f"volume='{vol_normal}':enable='between(t,{t4},{t5})',"
-            f"volume='{vol_normal}*(1-(t-{t5})/{fade_out})':enable='gte(t,{t5})',"
+            # Volume dinâmico com expressão
+            f"volume='{volume_expr}':eval=frame,"
             f"aformat=sample_fmts=fltp:sample_rates=44100:channel_layouts=stereo[bg];"
             # Input 1: TTS com delay e volume
             f"[1:a]adelay={int(intro * 1000)}|{int(intro * 1000)},volume={vol_voice},"
@@ -1886,6 +1900,8 @@ async def generate_mixed_audio(data: MixAudioRequest):
             # Mixar os dois
             f"[bg][voice]amix=inputs=2:duration=first:dropout_transition=0[out]"
         )
+
+        print(f"[MIX] Filter complex criado")
 
         # Executar FFmpeg
         cmd = [
@@ -1898,11 +1914,16 @@ async def generate_mixed_audio(data: MixAudioRequest):
             str(output_path)
         ]
 
+        print(f"[MIX] Executando FFmpeg...")
+        print(f"[MIX] Comando: {' '.join(cmd[:6])}...")
         result = subprocess.run(cmd, capture_output=True, text=True)
 
         if result.returncode != 0:
-            print(f"FFmpeg error: {result.stderr}")
-            raise HTTPException(status_code=500, detail=f"Erro ao mixar áudio: {result.stderr[:200]}")
+            print(f"[MIX] FFmpeg erro (código {result.returncode}):")
+            print(f"[MIX] stderr: {result.stderr}")
+            raise HTTPException(status_code=500, detail=f"Erro ao mixar áudio: {result.stderr[:500]}")
+
+        print(f"[MIX] FFmpeg concluído com sucesso!")
 
         # Obter duração final
         final_duration = None
