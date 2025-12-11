@@ -279,6 +279,89 @@ class MusicSync:
         if self._sync_thread:
             self._sync_thread.join(timeout=1)
 
+    def get_playlist(self, limit: int = 10) -> list[dict]:
+        """Obtém a playlist atual do servidor"""
+        try:
+            response = requests.get(
+                f"{self.server_url}/api/playlist?limit={limit}", 
+                timeout=10
+            )
+            if response.status_code == 200:
+                return response.json()
+            return []
+        except Exception as e:
+            print(f"Erro ao obter playlist do servidor: {e}")
+            return []
+
+    def sync_priority(self, min_count: int = 3, callback: Optional[Callable[[str, int, int], None]] = None) -> int:
+        """
+        Sincronização prioritária para inicialização rápida.
+        Baixa apenas as próximas N músicas da playlist que não estão no cache.
+        """
+        downloaded = 0
+        
+        try:
+            # 1. Obter config e lista completa de músicas (para mapeamento ID -> arquivo)
+            server_music = self.get_server_music_list()
+            if not server_music:
+                self.is_offline = True
+                return 0
+                
+            server_files = {m['id']: m for m in server_music}
+            
+            # 2. Obter playlist futura
+            playlist = self.get_playlist(limit=20)
+            if not playlist:
+                return 0
+                
+            # 3. Filtrar apenas as próximas músicas que precisamos baixar
+            to_download = []
+            local_files = self.get_local_files()
+            
+            # Atualizar mapeamento de IDs existentes antes
+            for music_id, info in server_files.items():
+                filename = info['original_name']
+                if filename in local_files:
+                     self.id_to_file[music_id] = str(self.music_folder / filename)
+            
+            for item in playlist:
+                music_id = item.get('music_id')
+                if not music_id:
+                    continue
+                    
+                # Se já temos o suficiente para começar, parar
+                if len(to_download) >= min_count:
+                    break
+                    
+                # Verificar se precisa baixar
+                if music_id in server_files:
+                    info = server_files[music_id]
+                    filename = info['original_name']
+                    
+                    if filename not in local_files:
+                        # Evitar duplicatas na fila de download
+                        if not any(d['id'] == music_id for d in to_download):
+                            to_download.append(info)
+            
+            # 4. Baixar itens prioritários
+            total = len(to_download)
+            for i, info in enumerate(to_download):
+                filename = info['original_name']
+                
+                if callback:
+                    callback(filename, i + 1, total)
+                    
+                if self.download_music(info['id'], filename):
+                    downloaded += 1
+                    
+            print(f"Sync prioritário: {downloaded} músicas baixadas")
+            return downloaded
+            
+        except Exception as e:
+            print(f"Erro no sync prioritário: {e}")
+            # Em caso de erro, permitir que o app abra (talvez offline)
+            return 0
+
     def get_next_from_server(self) -> Optional[dict]:
         """Obtém próxima música da playlist do servidor"""
         try:

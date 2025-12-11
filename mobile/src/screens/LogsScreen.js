@@ -124,32 +124,34 @@ export default function LogsScreen() {
   return (
     <View style={styles.container}>
       {/* Filter Chips */}
-      <FlatList
-        horizontal
-        data={LOG_TYPES}
-        keyExtractor={(item) => item.key || 'all'}
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.filterContainer}
-        renderItem={({ item }) => (
-          <TouchableOpacity
-            style={[
-              styles.filterChip,
-              selectedType === item.key && styles.filterChipActive,
-            ]}
-            onPress={() => setSelectedType(item.key)}
-            activeOpacity={0.7}
-          >
-            <Text
+      <View style={styles.filterWrapper}>
+        <FlatList
+          horizontal
+          data={LOG_TYPES}
+          keyExtractor={(item) => item.key || 'all'}
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.filterContainer}
+          renderItem={({ item }) => (
+            <TouchableOpacity
               style={[
-                styles.filterText,
-                selectedType === item.key && styles.filterTextActive,
+                styles.filterChip,
+                selectedType === item.key && styles.filterChipActive,
               ]}
+              onPress={() => setSelectedType(item.key)}
+              activeOpacity={0.7}
             >
-              {item.label}
-            </Text>
-          </TouchableOpacity>
-        )}
-      />
+              <Text
+                style={[
+                  styles.filterText,
+                  selectedType === item.key && styles.filterTextActive,
+                ]}
+              >
+                {item.label}
+              </Text>
+            </TouchableOpacity>
+          )}
+        />
+      </View>
 
       {/* Logs List */}
       {loading ? (
@@ -186,6 +188,9 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.background,
   },
+  filterWrapper: {
+    backgroundColor: colors.background,
+  },
   filterContainer: {
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.md,
@@ -220,6 +225,7 @@ const styles = StyleSheet.create({
   listContent: {
     padding: spacing.lg,
     paddingTop: 0,
+    flexGrow: 1,
   },
   logItem: {
     backgroundColor: colors.surface,

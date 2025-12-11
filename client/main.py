@@ -466,7 +466,18 @@ class FalaVIPPlayer:
         self.gui.quit()
 
 
+
+def log_error(msg):
+    try:
+        with open("debug_log.txt", "a", encoding='utf-8') as f:
+            import datetime
+            timestamp = datetime.datetime.now().isoformat()
+            f.write(f"[{timestamp}] {msg}\n")
+    except:
+        pass
+
 def main():
+    log_error("Iniciando main()...")
     # Mostrar splash screen durante carregamento
     splash = SplashScreen()
 
@@ -476,24 +487,27 @@ def main():
     def load_app(splash_screen):
         nonlocal app, load_error
         try:
+            log_error("load_app iniciado")
             splash_screen.update_status_safe("Inicializando componentes...", 10)
 
             # Criar instância do player
+            log_error("Criando instância FalaVIPPlayer")
             app = FalaVIPPlayer()
 
             # Callback para mostrar progresso do download
             def on_download_progress(filename, current, total):
                 # Truncar nome se muito longo
                 display_name = filename[:35] + "..." if len(filename) > 38 else filename
-                progress = 30 + int((current / max(total, 1)) * 20)  # 30-50%
-                splash_screen.update_status_safe(f"Baixando ({current}/{total}): {display_name}", progress)
+                # Progresso visual mais suave
+                percent = int((current / max(total, 1)) * 100)
+                splash_screen.update_status_safe(f"Baixando prioridade ({current}/{total}): {display_name}", 30 + (percent // 2))
 
             app.sync.on_download_progress = on_download_progress
 
-            splash_screen.update_status_safe("Verificando músicas...", 25)
-            app.sync.sync()
-
-            splash_screen.update_status_safe("Carregando agendamentos...", 55)
+            splash_screen.update_status_safe("Buscando playlist e configs...", 25)
+            
+            # Atualizar configs primeiro
+            log_error("Sincronizando agendamentos...")
             schedules = app.sync.sync_schedules()
             if schedules:
                 app.scheduler.update_schedules(
@@ -503,26 +517,39 @@ def main():
                     schedules.get('hourly_volumes', {})
                 )
 
-            splash_screen.update_status_safe("Preparando playlist...", 75)
+            # Sync prioritário (baixa as próximas 3 músicas se não tiver)
+            log_error("Iniciando sync_priority...")
+            splash_screen.update_status_safe("Verificando próximas músicas...", 40)
+            app.sync.sync_priority(min_count=3, callback=on_download_progress)
+
+            log_error("Carregando playlist no player...")
+            splash_screen.update_status_safe("Preparando player...", 80)
             music_files = app.sync.get_music_files()
             app.player.load_playlist(shuffle=True, music_files=music_files)
 
-            splash_screen.update_status_safe("Finalizando...", 90)
+            splash_screen.update_status_safe("Iniciando...", 95)
             # WebSocket será conectado depois
 
             splash_screen.update_status_safe("Pronto!", 100)
+            log_error("load_app concluído com sucesso")
 
         except Exception as e:
             load_error = str(e)
+            log_error(f"ERRO em load_app: {e}")
             print(f"Erro no carregamento: {e}")
             import traceback
             traceback.print_exc()
+            log_error(traceback.format_exc())
 
     # Executar carregamento com splash
-    splash.run_with_callback(load_app)
+    try:
+        splash.run_with_callback(load_app)
+    except Exception as e:
+        log_error(f"Erro ao rodar splash: {e}")
 
     # Se houve erro, mostrar mensagem
     if load_error:
+        log_error(f"Exibindo mensagem de erro: {load_error}")
         try:
             import tkinter as tk
             root = tk.Tk()
@@ -530,16 +557,18 @@ def main():
             from tkinter import messagebox
             messagebox.showerror("Erro", f"Falha ao iniciar:\n{load_error}")
             root.destroy()
-        except:
-            pass
+        except Exception as e:
+            log_error(f"Erro ao exibir messagebox: {e}")
         return
 
     # Se não carregou o app, sair
     if app is None:
+        log_error("App é None, saindo.")
         return
 
     # Iniciar a aplicação principal (sem o carregamento inicial)
     try:
+        log_error("Iniciando GUI...")
         app.start_gui_only()
     except KeyboardInterrupt:
         try:
@@ -547,6 +576,7 @@ def main():
         except:
             pass
     except Exception as e:
+        log_error(f"Erro fatal na main loop: {e}")
         print(f"Erro: {e}")
         import traceback
         traceback.print_exc()
@@ -557,4 +587,10 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except Exception as e:
+        with open("fatal_error.txt", "w") as f:
+            import traceback
+            f.write(traceback.format_exc())
+

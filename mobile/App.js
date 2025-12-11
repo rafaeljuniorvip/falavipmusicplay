@@ -2,8 +2,9 @@ import React from 'react';
 import { StatusBar } from 'expo-status-bar';
 import { NavigationContainer } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { createNativeStackNavigator } from '@react-navigation/native-stack';
-import { View, Text, StyleSheet } from 'react-native';
+import { createStackNavigator } from '@react-navigation/stack';
+import { View, Text, StyleSheet, Platform, StatusBar as RNStatusBar } from 'react-native';
+import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import PlayerScreen from './src/screens/PlayerScreen';
 import SchedulesScreen from './src/screens/SchedulesScreen';
@@ -13,7 +14,7 @@ import LogsScreen from './src/screens/LogsScreen';
 import SettingsScreen from './src/screens/SettingsScreen';
 import { colors } from './src/theme';
 
-const Stack = createNativeStackNavigator();
+const Stack = createStackNavigator();
 
 const Tab = createBottomTabNavigator();
 
@@ -41,71 +42,100 @@ const TabIcon = ({ name, focused }) => {
   );
 };
 
-const stackScreenOptions = {
-  headerStyle: {
-    backgroundColor: colors.surface,
-  },
-  headerTintColor: colors.gold,
-  headerTitleStyle: {
-    fontWeight: '600',
-    fontSize: 17,
-  },
-  headerShadowVisible: false,
+// Get status bar height for Android
+const getStatusBarHeight = (insets) => {
+  if (Platform.OS === 'android') {
+    // Use RNStatusBar.currentHeight as fallback for Android
+    // Ensure minimum of 24 for older devices
+    const height = Math.max(insets.top, RNStatusBar.currentHeight || 0, 24);
+    return height;
+  }
+  return insets.top;
 };
 
 // Stack navigator for Music tab
 function MusicStack() {
+  const insets = useSafeAreaInsets();
+  const statusBarHeight = getStatusBarHeight(insets);
+
   return (
-    <Stack.Navigator screenOptions={stackScreenOptions}>
+    <Stack.Navigator
+      screenOptions={{
+        headerStyle: {
+          backgroundColor: colors.surface,
+          borderBottomWidth: 1,
+          borderBottomColor: colors.border,
+          elevation: 0,
+          shadowOpacity: 0,
+        },
+        headerTintColor: colors.gold,
+        headerTitleStyle: {
+          fontWeight: '600',
+          fontSize: 17,
+        },
+        headerStatusBarHeight: statusBarHeight,
+        cardStyle: {
+          backgroundColor: colors.background,
+        },
+      }}
+    >
       <Stack.Screen
         name="MusicList"
         component={MusicScreen}
-        options={{ title: 'Musicas de Natal' }}
+        options={{ title: 'Músicas de Natal' }}
       />
       <Stack.Screen
         name="AudioCreate"
         component={AudioCreateScreen}
-        options={{ title: 'Criar Audio' }}
+        options={{ title: 'Criar Áudio' }}
       />
     </Stack.Navigator>
   );
 }
 
-const screenOptions = {
-  headerStyle: {
-    backgroundColor: colors.surface,
-    elevation: 0,
-    shadowOpacity: 0,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-  },
-  headerTintColor: colors.gold,
-  headerTitleStyle: {
-    fontWeight: '600',
-    fontSize: 17,
-  },
-  tabBarStyle: {
-    backgroundColor: colors.surface,
-    borderTopColor: colors.border,
-    borderTopWidth: 1,
-    height: 70,
-    paddingBottom: 12,
-    paddingTop: 8,
-  },
-  tabBarActiveTintColor: colors.gold,
-  tabBarInactiveTintColor: colors.textMuted,
-  tabBarLabelStyle: {
-    fontSize: 10,
-    fontWeight: '600',
-    letterSpacing: 0.3,
-  },
+// Custom hook to get screen options with safe area insets
+const useScreenOptions = () => {
+  const insets = useSafeAreaInsets();
+  const statusBarHeight = getStatusBarHeight(insets);
+
+  return {
+    headerStyle: {
+      backgroundColor: colors.surface,
+      elevation: 0,
+      shadowOpacity: 0,
+      borderBottomWidth: 1,
+      borderBottomColor: colors.border,
+    },
+    headerTintColor: colors.gold,
+    headerTitleStyle: {
+      fontWeight: '600',
+      fontSize: 17,
+    },
+    // Ensure header respects safe area on Android
+    headerStatusBarHeight: statusBarHeight,
+    tabBarStyle: {
+      backgroundColor: colors.surface,
+      borderTopColor: colors.border,
+      borderTopWidth: 1,
+      height: 60 + insets.bottom,
+      paddingBottom: insets.bottom,
+      paddingTop: 8,
+    },
+    tabBarActiveTintColor: colors.gold,
+    tabBarInactiveTintColor: colors.textMuted,
+    tabBarLabelStyle: {
+      fontSize: 10,
+      fontWeight: '600',
+      letterSpacing: 0.3,
+    },
+  };
 };
 
-export default function App() {
+function AppContent() {
+  const screenOptions = useScreenOptions();
+
   return (
-    <NavigationContainer>
-      <StatusBar style="light" />
-      <Tab.Navigator screenOptions={screenOptions}>
+    <Tab.Navigator screenOptions={screenOptions}>
         <Tab.Screen
           name="Player"
           component={PlayerScreen}
@@ -152,7 +182,17 @@ export default function App() {
           }}
         />
       </Tab.Navigator>
-    </NavigationContainer>
+  );
+}
+
+export default function App() {
+  return (
+    <SafeAreaProvider>
+      <NavigationContainer>
+        <StatusBar style="light" />
+        <AppContent />
+      </NavigationContainer>
+    </SafeAreaProvider>
   );
 }
 
